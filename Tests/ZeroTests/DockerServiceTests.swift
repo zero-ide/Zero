@@ -47,4 +47,21 @@ final class DockerServiceTests: XCTestCase {
         XCTAssertTrue(mockRunner.executedArguments!.contains("zero-dev"))
         XCTAssertTrue(mockRunner.executedArguments!.contains("ubuntu:latest"))
     }
+    
+    func testExecuteCommand() throws {
+        // Given
+        let mockRunner = MockCommandRunner()
+        mockRunner.mockOutput = "git version 2.39.0"
+        let service = DockerService(runner: mockRunner)
+        
+        // When
+        let output = try service.executeCommand(container: "zero-dev", command: "git --version")
+        
+        // Then
+        XCTAssertEqual(output, "git version 2.39.0")
+        XCTAssertEqual(mockRunner.executedArguments?[0], "exec")
+        XCTAssertEqual(mockRunner.executedArguments?[1], "zero-dev")
+        // "git --version"이 하나의 인자로 전달되는지, 분리되는지는 구현에 따라 다름 (여기선 sh -c 로 감싸거나 직접 전달)
+        // 일단 단순 전달 가정
+    }
 }
