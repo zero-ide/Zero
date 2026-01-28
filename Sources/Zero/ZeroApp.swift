@@ -2,23 +2,18 @@ import SwiftUI
 
 @main
 struct ZeroApp: App {
+    @StateObject private var appState = AppState()
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            Group {
+                if appState.isLoggedIn {
+                    RepoListView()
+                } else {
+                    LoginView()
+                }
+            }
+            .environmentObject(appState)
         }
-    }
-}
-
-struct ContentView: View {
-    var body: some View {
-        VStack {
-            Image(systemName: "slash.circle")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Zero - Code without footprints.")
-                .font(.headline)
-        }
-        .padding()
-        .frame(minWidth: 400, minHeight: 300)
     }
 }
