@@ -9,11 +9,15 @@ let package = Package(
     products: [
         .executable(name: "Zero", targets: ["Zero"]),
     ],
-    dependencies: [],
+    dependencies: [
+        .package(url: "https://github.com/raspu/Highlightr.git", from: "2.1.0")
+    ],
     targets: [
         .executableTarget(
             name: "Zero",
-            dependencies: [],
+            dependencies: [
+                .product(name: "Highlightr", package: "Highlightr")
+            ],
             path: "Sources/Zero",
             resources: [
                 .process("Resources")
