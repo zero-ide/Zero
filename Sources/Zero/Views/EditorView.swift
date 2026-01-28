@@ -6,6 +6,14 @@ struct EditorView: View {
     @State private var fileContent: String = "// Select a file to start editing"
     @State private var currentLanguage: String = "plaintext"
     @State private var isEditorReady = false
+    @State private var isLoadingFile = false
+    @State private var isSaving = false
+    @State private var hasUnsavedChanges = false
+    @State private var statusMessage: String = ""
+    
+    private var fileService: FileService {
+        FileService(containerName: session.containerName)
+    }
     
     var body: some View {
         HSplitView {
@@ -26,7 +34,25 @@ struct EditorView: View {
                             .foregroundStyle(.secondary)
                         Text(file.name)
                             .font(.system(size: 12))
+                        
+                        if hasUnsavedChanges {
+                            Circle()
+                                .fill(.orange)
+                                .frame(width: 8, height: 8)
+                        }
+                        
                         Spacer()
+                        
+                        if isLoadingFile {
+                            ProgressView()
+                                .scaleEffect(0.6)
+                        }
+                        
+                        if !statusMessage.isEmpty {
+                            Text(statusMessage)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
@@ -43,6 +69,9 @@ struct EditorView: View {
                         isEditorReady = true
                     }
                 )
+                .onChange(of: fileContent) { _, _ in
+                    hasUnsavedChanges = true
+                }
             }
             .frame(minWidth: 400)
         }
@@ -50,10 +79,15 @@ struct EditorView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: saveFile) {
-                    Label("Save", systemImage: "square.and.arrow.down")
+                    if isSaving {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else {
+                        Label("Save", systemImage: "square.and.arrow.down")
+                    }
                 }
                 .keyboardShortcut("s", modifiers: .command)
-                .disabled(selectedFile == nil)
+                .disabled(selectedFile == nil || isSaving)
                 
                 Button(action: {}) {
                     Label("Terminal", systemImage: "terminal")
@@ -63,26 +97,59 @@ struct EditorView: View {
     }
     
     private func loadFile(_ file: FileItem) {
-        // TODO: docker exec cat {file.path} 실행해서 내용 가져오기
-        // 지금은 mock
+        guard !file.isDirectory else { return }
+        
+        isLoadingFile = true
+        statusMessage = "Loading..."
         currentLanguage = detectLanguage(for: file.name)
-        fileContent = """
-        // Content of \(file.name)
-        // This is a placeholder.
-        // Actual content will be loaded from the container.
         
-        import Foundation
-        
-        func hello() {
-            print("Hello from Zero IDE!")
+        Task {
+            do {
+                let content = try await fileService.readFile(path: file.path)
+                await MainActor.run {
+                    fileContent = content
+                    hasUnsavedChanges = false
+                    statusMessage = ""
+                    isLoadingFile = false
+                }
+            } catch {
+                await MainActor.run {
+                    fileContent = "// Error loading file: \(error.localizedDescription)"
+                    statusMessage = "Load failed"
+                    isLoadingFile = false
+                }
+            }
         }
-        """
     }
     
     private func saveFile() {
         guard let file = selectedFile else { return }
-        // TODO: docker exec로 파일 저장
-        print("Saving \(file.path)...")
+        
+        isSaving = true
+        statusMessage = "Saving..."
+        
+        Task {
+            do {
+                try await fileService.writeFile(path: file.path, content: fileContent)
+                await MainActor.run {
+                    hasUnsavedChanges = false
+                    statusMessage = "Saved"
+                    isSaving = false
+                    
+                    // 2초 후 상태 메시지 제거
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        if statusMessage == "Saved" {
+                            statusMessage = ""
+                        }
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    statusMessage = "Save failed"
+                    isSaving = false
+                }
+            }
+        }
     }
     
     private func detectLanguage(for filename: String) -> String {
@@ -100,6 +167,14 @@ struct EditorView: View {
         case "yaml", "yml": return "yaml"
         case "xml": return "xml"
         case "sh": return "shell"
+        case "c", "h": return "c"
+        case "cpp", "hpp", "cc": return "cpp"
+        case "go": return "go"
+        case "rs": return "rust"
+        case "rb": return "ruby"
+        case "php": return "php"
+        case "sql": return "sql"
+        case "dockerfile": return "dockerfile"
         default: return "plaintext"
         }
     }
