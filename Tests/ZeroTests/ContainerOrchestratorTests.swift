@@ -5,6 +5,7 @@ import XCTest
 class MockDockerService: DockerRunning, ContainerRunning {
     var didRunContainer = false
     var lastContainerName: String?
+    var lastImageName: String?
     var executedScripts: [String] = []
     
     // 호환성을 위한 계산 속성
@@ -24,6 +25,7 @@ class MockDockerService: DockerRunning, ContainerRunning {
     func runContainer(image: String, name: String) throws -> String {
         didRunContainer = true
         lastContainerName = name
+        lastImageName = image
         return "container-id-123"
     }
 }
@@ -66,9 +68,10 @@ final class ContainerOrchestratorTests: XCTestCase {
         
         // Then
         XCTAssertTrue(mockDocker.didRunContainer)
+        XCTAssertEqual(mockDocker.lastImageName, "alpine:latest")
         
-        // Git 설치 확인
-        XCTAssertTrue(mockDocker.executedScripts.contains { $0.contains("apt-get install -y git") })
+        // Git 설치 확인 (Alpine: apk add)
+        XCTAssertTrue(mockDocker.executedScripts.contains { $0.contains("apk add --no-cache git") })
         
         XCTAssertNotNil(session)
         XCTAssertEqual(session.repoURL, repo.cloneURL)
