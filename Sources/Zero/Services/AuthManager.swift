@@ -25,4 +25,21 @@ class AuthManager {
         }
         return queryItems.first(where: { $0.name == "code" })?.value
     }
+
+    func createTokenExchangeRequest(code: String, clientSecret: String) throws -> URLRequest {
+        let url = URL(string: "https://github.com/login/oauth/access_token")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body: [String: String] = [
+            "client_id": clientID,
+            "client_secret": clientSecret,
+            "code": code
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        return request
+    }
 }
