@@ -5,9 +5,20 @@ import XCTest
 class MockDockerService: DockerRunning, ContainerRunning {
     var didRunContainer = false
     var lastContainerName: String?
+    var executedScripts: [String] = []
+    
+    // 호환성을 위한 계산 속성
+    var executedScript: String? {
+        return executedScripts.last
+    }
     
     func executeCommand(container: String, command: String) throws -> String {
         return "mock output"
+    }
+    
+    func executeShell(container: String, script: String) throws -> String {
+        executedScripts.append(script)
+        return "mock shell output"
     }
     
     func runContainer(image: String, name: String) throws -> String {
@@ -55,6 +66,10 @@ final class ContainerOrchestratorTests: XCTestCase {
         
         // Then
         XCTAssertTrue(mockDocker.didRunContainer)
+        
+        // Git 설치 확인
+        XCTAssertTrue(mockDocker.executedScripts.contains { $0.contains("apt-get install -y git") })
+        
         XCTAssertNotNil(session)
         XCTAssertEqual(session.repoURL, repo.cloneURL)
         
