@@ -4,11 +4,6 @@ import SwiftUI
 struct ZeroApp: App {
     @StateObject private var appState = AppState()
     
-    init() {
-        // 앱을 regular 앱으로 등록 (Dock 아이콘, 메뉴바, 키보드 입력 활성화)
-        NSApp.setActivationPolicy(.regular)
-    }
-    
     var body: some Scene {
         WindowGroup {
             Group {
@@ -29,7 +24,9 @@ struct ZeroApp: App {
             }
             .environmentObject(appState)
             .onAppear {
-                NSApp.activate(ignoringOtherApps: true)
+                // 앱을 regular 앱으로 등록 (Dock 아이콘, 메뉴바, 키보드 입력 활성화)
+                NSApplication.shared.setActivationPolicy(.regular)
+                NSApplication.shared.activate(ignoringOtherApps: true)
             }
         }
         .windowStyle(.automatic)
