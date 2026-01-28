@@ -14,7 +14,10 @@ let package = Package(
         .executableTarget(
             name: "Zero",
             dependencies: [],
-            path: "Sources/Zero"),
+            path: "Sources/Zero",
+            resources: [
+                .process("Resources")
+            ]),
         .testTarget(
             name: "ZeroTests",
             dependencies: ["Zero"],
