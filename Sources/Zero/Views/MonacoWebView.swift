@@ -61,6 +61,8 @@ struct MonacoWebView: NSViewRepresentable {
                     .replacingOccurrences(of: "'", with: "\\'")
                     .replacingOccurrences(of: "\n", with: "\\n")
                 webView?.evaluateJavaScript("setContent('\(escaped)', '\(parent.language)')")
+            } else if message.name == "contentChanged", let body = message.body as? String {
+                parent.content = body
             }
         }
     }
@@ -92,6 +94,12 @@ struct MonacoWebView: NSViewRepresentable {
                     minimap: { enabled: true },
                     automaticLayout: true
                 });
+                
+                // Add change listener
+                editor.onDidChangeModelContent(() => {
+                    window.webkit.messageHandlers.contentChanged.postMessage(editor.getValue());
+                });
+                
                 window.webkit.messageHandlers.editorReady.postMessage('ready');
             });
             function setContent(content, language) {

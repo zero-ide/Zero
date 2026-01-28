@@ -16,6 +16,32 @@ struct RepoListView: View {
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading) {
+                // Organization Picker
+                if !appState.organizations.isEmpty {
+                    HStack {
+                        Text("Context")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Picker("Organization", selection: $appState.selectedOrg) {
+                            Text("Personal").tag(Optional<Organization>.none)
+                            ForEach(appState.organizations) { org in
+                                Text(org.login).tag(Optional(org))
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .onChange(of: appState.selectedOrg) { _ in
+                            Task { await appState.fetchRepositories() }
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                    
+                    Divider()
+                        .padding(.vertical, 8)
+                }
+                
                 // Active Sessions
                 if !appState.sessions.isEmpty {
                     Section {
@@ -79,6 +105,7 @@ struct RepoListView: View {
                 .foregroundStyle(.secondary)
         }
         .task {
+            await appState.fetchOrganizations()
             await appState.fetchRepositories()
             appState.loadSessions()
         }

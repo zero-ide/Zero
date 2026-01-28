@@ -15,6 +15,9 @@ class AppState: ObservableObject {
     @Published var isLoadingMore: Bool = false
     @Published var hasMoreRepos: Bool = true
     
+    @Published var organizations: [Organization] = []
+    @Published var selectedOrg: Organization? = nil
+    
     // 페이지 크기 (테스트 시 조정 가능)
     var pageSize: Int = 30
     
@@ -61,6 +64,16 @@ class AppState: ObservableObject {
         self.repositories = []
     }
     
+    func fetchOrganizations() async {
+        guard let token = accessToken else { return }
+        do {
+            let service = gitHubServiceFactory(token)
+            self.organizations = try await service.fetchOrganizations()
+        } catch {
+            print("Failed to fetch orgs: \(error)")
+        }
+    }
+    
     func fetchRepositories() async {
         guard let token = accessToken else { return }
         isLoading = true
@@ -70,7 +83,15 @@ class AppState: ObservableObject {
         
         do {
             let service = gitHubServiceFactory(token)
-            let repos = try await service.fetchRepositories(page: 1)
+            let repos: [Repository]
+            
+            if let org = selectedOrg {
+                repos = try await service.fetchOrgRepositories(org: org.login, page: 1)
+            } else {
+                // Personal 선택 시 owner 타입만 조회 (내 소유 레포)
+                repos = try await service.fetchRepositories(page: 1, type: "owner")
+            }
+            
             self.repositories = repos
             
             // 페이지 크기보다 적으면 더 이상 데이터가 없는 것으로 판단
@@ -91,7 +112,13 @@ class AppState: ObservableObject {
         
         do {
             let service = gitHubServiceFactory(token)
-            let repos = try await service.fetchRepositories(page: nextPage)
+            let repos: [Repository]
+            
+            if let org = selectedOrg {
+                repos = try await service.fetchOrgRepositories(org: org.login, page: nextPage)
+            } else {
+                repos = try await service.fetchRepositories(page: nextPage, type: "owner")
+            }
             
             if repos.isEmpty {
                 hasMoreRepos = false
