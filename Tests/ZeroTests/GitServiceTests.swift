@@ -1,17 +1,7 @@
 import XCTest
 @testable import Zero
 
-// Mock for DockerService (Dependency Injection 필요)
-// DockerService가 struct라 Mocking이 어렵습니다. 
-// 테스트를 위해 DockerService도 Protocol로 추상화하거나, GitService가 CommandRunner만 받도록 해야 합니다.
-// 여기서는 GitService가 DockerService를 직접 의존하지 않고, 'ContainerCommandRunner' 프로토콜을 의존하게 설계하는 것이 좋습니다.
-
-protocol ContainerRunning {
-    func executeCommand(container: String, command: String) throws -> String
-}
-
-extension DockerService: ContainerRunning {}
-
+// Mock for DockerService (Dependency Injection)
 class MockContainerRunner: ContainerRunning {
     var executedContainer: String?
     var executedCommand: String?
