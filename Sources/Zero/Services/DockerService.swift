@@ -20,4 +20,12 @@ struct DockerService {
         let args = ["run", "-d", "--rm", "--name", name, image]
         return try runner.execute(command: dockerPath, arguments: args)
     }
+    
+    func executeCommand(container: String, command: String) throws -> String {
+        // docker exec {container} {command}
+        // command 문자열을 공백으로 쪼개서 전달 (간단한 구현)
+        let commandArgs = command.components(separatedBy: " ")
+        let args = ["exec", container] + commandArgs
+        return try runner.execute(command: dockerPath, arguments: args)
+    }
 }
