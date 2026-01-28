@@ -2,7 +2,7 @@ import XCTest
 @testable import Zero
 
 // Mock implementations for testing
-class MockDockerService: ContainerRunning {
+class MockDockerService: DockerRunning, ContainerRunning {
     var didRunContainer = false
     var lastContainerName: String?
     
