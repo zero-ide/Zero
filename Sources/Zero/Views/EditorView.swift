@@ -10,72 +10,119 @@ struct EditorView: View {
     @State private var isSaving = false
     @State private var hasUnsavedChanges = false
     @State private var statusMessage: String = ""
+    @State private var cursorLine: Int = 1
+    @State private var cursorColumn: Int = 1
     
     private var fileService: FileService {
         FileService(containerName: session.containerName)
     }
     
     var body: some View {
-        HSplitView {
-            // Left: File Explorer
+        NavigationSplitView {
             FileExplorerView(
                 selectedFile: $selectedFile,
                 containerName: session.containerName,
+                projectName: session.repoURL.lastPathComponent.replacingOccurrences(of: ".git", with: ""),
                 onFileSelect: loadFile
             )
-            .frame(minWidth: 180, idealWidth: 220, maxWidth: 300)
-            
-            // Center: Monaco Editor
-            VStack(spacing: 0) {
-                // Tab bar
-                if let file = selectedFile {
-                    HStack {
-                        Image(systemName: "doc.text")
-                            .foregroundStyle(.secondary)
-                        Text(file.name)
+            .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 400)
+        } detail: {
+            ZStack {
+                // 배경
+                Color(nsColor: .windowBackgroundColor)
+                    .ignoresSafeArea()
+                
+                // 에디터 카드 (모든 모서리 일관되게 둥글게)
+                VStack(spacing: 0) {
+                    // 헤더 (Breadcrumb)
+                    HStack(spacing: 6) {
+                        Image(systemName: "folder.fill")
                             .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
                         
-                        if hasUnsavedChanges {
-                            Circle()
-                                .fill(.orange)
-                                .frame(width: 8, height: 8)
+                        Text(session.repoURL.lastPathComponent.replacingOccurrences(of: ".git", with: ""))
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                        
+                        if let file = selectedFile {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.quaternary)
+                            
+                            Image(systemName: iconForFile(file.name))
+                                .font(.system(size: 12))
+                                .foregroundStyle(colorForFile(file.name))
+                            
+                            Text(file.name)
+                                .font(.system(size: 13, weight: .medium))
+                            
+                            if hasUnsavedChanges {
+                                Circle()
+                                    .fill(.orange)
+                                    .frame(width: 7, height: 7)
+                            }
                         }
                         
                         Spacer()
                         
-                        if isLoadingFile {
-                            ProgressView()
-                                .scaleEffect(0.6)
-                        }
-                        
                         if !statusMessage.isEmpty {
                             Text(statusMessage)
-                                .font(.caption)
+                                .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
                     .background(Color(nsColor: .controlBackgroundColor))
                     
                     Divider()
-                }
-                
-                // Editor
-                MonacoWebView(
-                    content: $fileContent,
-                    language: currentLanguage,
-                    onReady: {
-                        isEditorReady = true
+                    
+                    // 에디터
+                    CodeEditorView(
+                        content: $fileContent,
+                        language: currentLanguage,
+                        onReady: { isEditorReady = true },
+                        onCursorChange: { line, column in
+                            cursorLine = line
+                            cursorColumn = column
+                        }
+                    )
+                    .onChange(of: fileContent) { _, _ in
+                        if !isLoadingFile {
+                            hasUnsavedChanges = true
+                        }
                     }
-                )
-                .onChange(of: fileContent) { _, _ in
-                    hasUnsavedChanges = true
+                    
+                    Divider()
+                    
+                    // 상태 표시줄
+                    HStack(spacing: 12) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                .font(.system(size: 9))
+                            Text(languageDisplayName(currentLanguage))
+                                .font(.system(size: 11))
+                        }
+                        .foregroundStyle(.secondary)
+                        
+                        Spacer()
+                        
+                        Text("Ln \(cursorLine), Col \(cursorColumn)")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                        
+                        Text("UTF-8")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Color(nsColor: .controlBackgroundColor))
                 }
+                .background(Color.white)
             }
-            .frame(minWidth: 400)
         }
-        .navigationTitle("Zero - \(session.repoURL.lastPathComponent.replacingOccurrences(of: ".git", with: ""))")
+        .navigationTitle("Zero")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: saveFile) {
@@ -96,11 +143,69 @@ struct EditorView: View {
         }
     }
     
+    // MARK: - Helpers
+    
+    private func iconForFile(_ filename: String) -> String {
+        let ext = (filename as NSString).pathExtension.lowercased()
+        switch ext {
+        case "swift": return "swift"
+        case "java", "kt", "kts": return "cup.and.saucer.fill"
+        case "js": return "j.square.fill"
+        case "ts": return "t.square.fill"
+        case "py": return "p.square.fill"
+        case "json": return "curlybraces"
+        case "md": return "doc.richtext.fill"
+        case "html", "css": return "globe"
+        case "yml", "yaml": return "list.bullet.rectangle.fill"
+        case "sh": return "terminal.fill"
+        case "dockerfile": return "shippingbox.fill"
+        default: return "doc.text.fill"
+        }
+    }
+    
+    private func colorForFile(_ filename: String) -> Color {
+        let ext = (filename as NSString).pathExtension.lowercased()
+        switch ext {
+        case "swift": return .orange
+        case "java": return .red
+        case "kt", "kts": return .purple
+        case "js": return .yellow
+        case "ts": return .blue
+        case "py": return .cyan
+        case "json": return .yellow
+        case "md": return .blue
+        case "html": return .orange
+        case "css": return .pink
+        case "yml", "yaml": return .pink
+        case "sh": return .green
+        default: return .secondary
+        }
+    }
+    
+    private func languageDisplayName(_ lang: String) -> String {
+        switch lang {
+        case "swift": return "Swift"
+        case "java": return "Java"
+        case "kotlin": return "Kotlin"
+        case "javascript": return "JavaScript"
+        case "typescript": return "TypeScript"
+        case "python": return "Python"
+        case "json": return "JSON"
+        case "html": return "HTML"
+        case "css": return "CSS"
+        case "markdown": return "Markdown"
+        case "yaml": return "YAML"
+        case "shell": return "Shell"
+        case "dockerfile": return "Dockerfile"
+        case "plaintext": return "Plain Text"
+        default: return lang.capitalized
+        }
+    }
+    
     private func loadFile(_ file: FileItem) {
         guard !file.isDirectory else { return }
         
         isLoadingFile = true
-        statusMessage = "Loading..."
         currentLanguage = detectLanguage(for: file.name)
         
         Task {
@@ -114,8 +219,8 @@ struct EditorView: View {
                 }
             } catch {
                 await MainActor.run {
-                    fileContent = "// Error loading file: \(error.localizedDescription)"
-                    statusMessage = "Load failed"
+                    fileContent = "// Error: \(error.localizedDescription)"
+                    statusMessage = "Failed"
                     isLoadingFile = false
                 }
             }
@@ -136,16 +241,13 @@ struct EditorView: View {
                     statusMessage = "Saved"
                     isSaving = false
                     
-                    // 2초 후 상태 메시지 제거
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        if statusMessage == "Saved" {
-                            statusMessage = ""
-                        }
+                        if statusMessage == "Saved" { statusMessage = "" }
                     }
                 }
             } catch {
                 await MainActor.run {
-                    statusMessage = "Save failed"
+                    statusMessage = "Failed"
                     isSaving = false
                 }
             }
@@ -160,6 +262,7 @@ struct EditorView: View {
         case "ts": return "typescript"
         case "py": return "python"
         case "java": return "java"
+        case "kt", "kts": return "kotlin"
         case "json": return "json"
         case "html": return "html"
         case "css": return "css"
@@ -168,7 +271,7 @@ struct EditorView: View {
         case "xml": return "xml"
         case "sh": return "shell"
         case "c", "h": return "c"
-        case "cpp", "hpp", "cc": return "cpp"
+        case "cpp", "hpp": return "cpp"
         case "go": return "go"
         case "rs": return "rust"
         case "rb": return "ruby"
