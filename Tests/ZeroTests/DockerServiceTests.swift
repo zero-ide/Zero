@@ -46,6 +46,10 @@ final class DockerServiceTests: XCTestCase {
         XCTAssertTrue(mockRunner.executedArguments!.contains("--rm")) // 휘발성 확인
         XCTAssertTrue(mockRunner.executedArguments!.contains("zero-dev"))
         XCTAssertTrue(mockRunner.executedArguments!.contains("ubuntu:latest"))
+        // 컨테이너가 계속 살아있도록 keep-alive 명령어 필요
+        XCTAssertTrue(mockRunner.executedArguments!.contains("tail"))
+        XCTAssertTrue(mockRunner.executedArguments!.contains("-f"))
+        XCTAssertTrue(mockRunner.executedArguments!.contains("/dev/null"))
     }
     
     func testExecuteCommand() throws {

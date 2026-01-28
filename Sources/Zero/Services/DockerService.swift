@@ -14,10 +14,11 @@ struct DockerService {
     }
     
     func runContainer(image: String, name: String) throws -> String {
-        // docker run -d --rm --name {name} {image}
+        // docker run -d --rm --name {name} {image} tail -f /dev/null
         // -d: Detached mode (백그라운드)
         // --rm: 컨테이너 종료 시 자동 삭제 (일회용)
-        let args = ["run", "-d", "--rm", "--name", name, image]
+        // tail -f /dev/null: 컨테이너가 종료되지 않고 계속 실행되도록 유지
+        let args = ["run", "-d", "--rm", "--name", name, image, "tail", "-f", "/dev/null"]
         return try runner.execute(command: dockerPath, arguments: args)
     }
     
