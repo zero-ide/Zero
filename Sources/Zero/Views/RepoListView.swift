@@ -34,8 +34,24 @@ struct RepoListView: View {
                 
                 // Repositories
                 Section {
-                    List(filteredRepos) { repo in
-                        RepoRow(repo: repo)
+                    List {
+                        ForEach(filteredRepos) { repo in
+                            RepoRow(repo: repo)
+                                .onAppear {
+                                    if searchText.isEmpty && repo.id == filteredRepos.last?.id {
+                                        Task { await appState.loadMoreRepositories() }
+                                    }
+                                }
+                        }
+                        
+                        if appState.isLoadingMore {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                Spacer()
+                            }
+                            .padding()
+                        }
                     }
                 } header: {
                     Text("Repositories")
