@@ -17,4 +17,12 @@ class AuthManager {
         ]
         return components.url!
     }
+
+    func extractCode(from url: URL) -> String? {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let queryItems = components.queryItems else {
+            return nil
+        }
+        return queryItems.first(where: { $0.name == "code" })?.value
+    }
 }
