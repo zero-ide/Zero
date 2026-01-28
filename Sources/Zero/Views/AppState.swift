@@ -8,9 +8,17 @@ class AppState: ObservableObject {
     @Published var repositories: [Repository] = []
     @Published var sessions: [Session] = []
     @Published var isLoading: Bool = false
+    @Published var activeSession: Session? = nil
+    @Published var isEditing: Bool = false
+    @Published var loadingMessage: String = ""
     
     private let keychainService = "com.zero.ide"
     private let keychainAccount = "github_token"
+    private let sessionManager = SessionManager()
+    private lazy var orchestrator: ContainerOrchestrator = {
+        let docker = DockerService()
+        return ContainerOrchestrator(dockerService: docker, sessionManager: sessionManager)
+    }()
     
     init() {
         checkLoginStatus()
@@ -57,10 +65,52 @@ class AppState: ObservableObject {
     
     func loadSessions() {
         do {
-            let manager = SessionManager()
-            self.sessions = try manager.loadSessions()
+            self.sessions = try sessionManager.loadSessions()
         } catch {
             print("Failed to load sessions: \(error)")
+        }
+    }
+    
+    /// 새 세션 시작 (컨테이너 생성 + Clone)
+    func startSession(for repo: Repository) async {
+        guard let token = accessToken else { return }
+        
+        isLoading = true
+        loadingMessage = "Creating container..."
+        
+        do {
+            let session = try await orchestrator.startSession(repo: repo, token: token)
+            self.activeSession = session
+            self.isEditing = true
+            loadSessions() // 세션 목록 갱신
+        } catch {
+            print("Failed to start session: \(error)")
+            loadingMessage = "Error: \(error.localizedDescription)"
+        }
+        
+        isLoading = false
+        loadingMessage = ""
+    }
+    
+    /// 기존 세션 재개
+    func resumeSession(_ session: Session) {
+        self.activeSession = session
+        self.isEditing = true
+    }
+    
+    /// 에디터 닫기
+    func closeEditor() {
+        self.activeSession = nil
+        self.isEditing = false
+    }
+    
+    /// 세션 삭제
+    func deleteSession(_ session: Session) {
+        do {
+            try orchestrator.deleteSession(session)
+            loadSessions()
+        } catch {
+            print("Failed to delete session: \(error)")
         }
     }
 }

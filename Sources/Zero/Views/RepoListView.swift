@@ -65,10 +65,16 @@ struct RepoListView: View {
             await appState.fetchRepositories()
             appState.loadSessions()
         }
+        .overlay {
+            if appState.isLoading {
+                LoadingOverlay(message: appState.loadingMessage)
+            }
+        }
     }
 }
 
 struct RepoRow: View {
+    @EnvironmentObject var appState: AppState
     let repo: Repository
     
     var body: some View {
@@ -87,7 +93,9 @@ struct RepoRow: View {
             Spacer()
             
             Button("Open") {
-                // TODO: 컨테이너 생성 로직
+                Task {
+                    await appState.startSession(for: repo)
+                }
             }
             .buttonStyle(.bordered)
         }
@@ -96,6 +104,7 @@ struct RepoRow: View {
 }
 
 struct SessionRow: View {
+    @EnvironmentObject var appState: AppState
     let session: Session
     
     var body: some View {
@@ -114,11 +123,41 @@ struct SessionRow: View {
             Spacer()
             
             Button("Resume") {
-                // TODO: 세션 재개 로직
+                appState.resumeSession(session)
             }
             .buttonStyle(.borderedProminent)
+            
+            Button(role: .destructive) {
+                appState.deleteSession(session)
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.bordered)
         }
         .padding(.vertical, 4)
         .padding(.horizontal)
+    }
+}
+
+struct LoadingOverlay: View {
+    let message: String
+    
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 16) {
+                ProgressView()
+                    .scaleEffect(1.5)
+                
+                if !message.isEmpty {
+                    Text(message)
+                        .foregroundStyle(.white)
+                }
+            }
+            .padding(32)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        }
     }
 }
