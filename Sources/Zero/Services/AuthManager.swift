@@ -10,6 +10,11 @@ class AuthManager {
     }
 
     func getLoginURL() -> URL {
-        return URL(string: "https://invalid-url.com")! // 일부러 틀리게 작성 (테스트 실패 유도)
+        var components = URLComponents(string: "https://github.com/login/oauth/authorize")!
+        components.queryItems = [
+            URLQueryItem(name: "client_id", value: clientID),
+            URLQueryItem(name: "scope", value: scope)
+        ]
+        return components.url!
     }
 }
