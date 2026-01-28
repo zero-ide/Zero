@@ -1,6 +1,10 @@
 import Foundation
 
-struct CommandRunner {
+protocol CommandRunning {
+    func execute(command: String, arguments: [String]) throws -> String
+}
+
+struct CommandRunner: CommandRunning {
     func execute(command: String, arguments: [String] = []) throws -> String {
         let process = Process()
         let pipe = Pipe()
