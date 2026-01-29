@@ -70,7 +70,9 @@ struct EditorView: View {
                     }
                 )
                 .onChange(of: fileContent) { _, _ in
-                    hasUnsavedChanges = true
+                    if !isLoadingFile {
+                        hasUnsavedChanges = true
+                    }
                 }
             }
             .frame(minWidth: 400)

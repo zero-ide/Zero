@@ -23,6 +23,9 @@ struct ZeroApp: App {
                 }
             }
             .environmentObject(appState)
+            .onAppear {
+                NSApp.activate(ignoringOtherApps: true)
+            }
         }
         .windowStyle(.automatic)
         .defaultSize(width: 1200, height: 800)
