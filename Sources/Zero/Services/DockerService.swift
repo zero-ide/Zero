@@ -28,4 +28,49 @@ struct DockerService {
         let args = ["exec", container] + commandArgs
         return try runner.execute(command: dockerPath, arguments: args)
     }
+    
+    /// 디렉토리 파일 목록 조회
+    func listFiles(container: String, path: String) throws -> String {
+        // ls -la 형식으로 출력
+        let args = ["exec", container, "ls", "-la", path]
+        return try runner.execute(command: dockerPath, arguments: args)
+    }
+    
+    /// 파일 내용 읽기
+    func readFile(container: String, path: String) throws -> String {
+        let args = ["exec", container, "cat", path]
+        return try runner.execute(command: dockerPath, arguments: args)
+    }
+    
+    /// 파일 저장 (base64 인코딩 사용으로 특수문자 처리)
+    func writeFile(container: String, path: String, content: String) throws {
+        // echo로 직접 쓰면 특수문자 문제가 생기므로 base64 사용
+        guard let data = content.data(using: .utf8) else { return }
+        let base64 = data.base64EncodedString()
+        let args = ["exec", container, "sh", "-c", "echo '\(base64)' | base64 -d > '\(path)'"]
+        _ = try runner.execute(command: dockerPath, arguments: args)
+    }
+    
+    /// 컨테이너 중지
+    func stopContainer(name: String) throws {
+        let args = ["stop", name]
+        _ = try runner.execute(command: dockerPath, arguments: args)
+    }
+    
+    /// 컨테이너 강제 삭제
+    func removeContainer(name: String) throws {
+        let args = ["rm", "-f", name]
+        _ = try runner.execute(command: dockerPath, arguments: args)
+    }
+    
+    /// 파일/디렉토리 존재 여부 확인
+    func fileExists(container: String, path: String) throws -> Bool {
+        let args = ["exec", container, "test", "-e", path]
+        do {
+            _ = try runner.execute(command: dockerPath, arguments: args)
+            return true
+        } catch {
+            return false
+        }
+    }
 }
