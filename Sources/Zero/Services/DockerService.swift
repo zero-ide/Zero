@@ -1,6 +1,24 @@
 import Foundation
 
-struct DockerService {
+protocol ContainerRunning {
+    func executeCommand(container: String, command: String) throws -> String
+    func executeShell(container: String, script: String) throws -> String
+}
+
+protocol DockerServiceProtocol: ContainerRunning {
+    func checkInstallation() throws -> Bool
+    func runContainer(image: String, name: String) throws -> String
+    func executeCommand(container: String, command: String) throws -> String
+    func executeShell(container: String, script: String) throws -> String
+    func listFiles(container: String, path: String) throws -> String
+    func readFile(container: String, path: String) throws -> String
+    func writeFile(container: String, path: String, content: String) throws
+    func stopContainer(name: String) throws
+    func removeContainer(name: String) throws
+    func fileExists(container: String, path: String) throws -> Bool
+}
+
+struct DockerService: DockerServiceProtocol {
     let runner: CommandRunning
     let dockerPath: String
     

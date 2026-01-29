@@ -1,20 +1,11 @@
 import Foundation
 
-// Docker 작업을 위한 프로토콜 (테스트 용이성)
-protocol DockerRunning {
-    func runContainer(image: String, name: String) throws -> String
-    func executeCommand(container: String, command: String) throws -> String
-    func executeShell(container: String, script: String) throws -> String
-}
-
-extension DockerService: DockerRunning {}
-
 class ContainerOrchestrator {
-    private let dockerService: DockerRunning
+    private let dockerService: DockerServiceProtocol
     private let sessionManager: SessionManager
     private let baseImage = Constants.Docker.baseImage
     
-    init(dockerService: DockerRunning, sessionManager: SessionManager) {
+    init(dockerService: DockerServiceProtocol, sessionManager: SessionManager) {
         self.dockerService = dockerService
         self.sessionManager = sessionManager
     }
@@ -31,7 +22,8 @@ class ContainerOrchestrator {
         _ = try dockerService.executeShell(container: containerName, script: "apk add --no-cache git")
         
         // 3. Git Clone (토큰 주입)
-        let gitService = GitService(runner: dockerService as! ContainerRunning)
+        // DockerServiceProtocol이 ContainerRunning을 상속받으므로 직접 전달 가능
+        let gitService = GitService(runner: dockerService)
         try gitService.clone(repoURL: repo.cloneURL, token: token, to: containerName)
         
         // 4. 세션 저장
@@ -45,13 +37,12 @@ class ContainerOrchestrator {
     
     /// 세션 중지 (컨테이너 stop)
     func stopSession(_ session: Session) throws {
-        _ = try dockerService.executeCommand(container: session.containerName, command: "exit")
-        // docker stop은 별도 명령어가 필요 - 추후 구현
+        try dockerService.stopContainer(name: session.containerName)
     }
     
     /// 세션 삭제 (컨테이너 rm + 메타데이터 삭제)
     func deleteSession(_ session: Session) throws {
-        // docker rm -f 명령어 실행 필요 - 추후 구현
+        try dockerService.removeContainer(name: session.containerName)
         try sessionManager.deleteSession(session)
     }
 }

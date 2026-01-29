@@ -17,9 +17,11 @@ struct CommandRunner: CommandRunning {
         process.waitUntilExit()
         
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let output = String(data: data, encoding: .utf8) ?? ""
         
-        guard let output = String(data: data, encoding: .utf8) else {
-            return ""
+        if process.terminationStatus != 0 {
+            // 에러 발생 시 throw
+            throw NSError(domain: "CommandRunner", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: output])
         }
         
         return output

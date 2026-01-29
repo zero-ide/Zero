@@ -1,12 +1,5 @@
 import Foundation
 
-protocol ContainerRunning {
-    func executeCommand(container: String, command: String) throws -> String
-    func executeShell(container: String, script: String) throws -> String
-}
-
-extension DockerService: ContainerRunning {}
-
 struct GitService {
     let runner: ContainerRunning
     
