@@ -11,6 +11,12 @@ class AppState: ObservableObject {
     @Published var activeSession: Session? = nil
     @Published var isEditing: Bool = false
     @Published var loadingMessage: String = ""
+    @Published var currentPage: Int = 1
+    @Published var isLoadingMore: Bool = false
+    @Published var hasMoreRepos: Bool = true
+    
+    // 페이지 크기 (테스트 시 조정 가능)
+    var pageSize: Int = 30
     
     private let keychainService = "com.zero.ide"
     private let keychainAccount = "github_token"
@@ -19,6 +25,11 @@ class AppState: ObservableObject {
         let docker = DockerService()
         return ContainerOrchestrator(dockerService: docker, sessionManager: sessionManager)
     }()
+    
+    // 테스트를 위한 Factory
+    var gitHubServiceFactory: (String) -> GitHubService = { token in
+        GitHubService(token: token)
+    }
     
     init() {
         checkLoginStatus()
@@ -53,13 +64,48 @@ class AppState: ObservableObject {
     func fetchRepositories() async {
         guard let token = accessToken else { return }
         isLoading = true
+        currentPage = 1
+        hasMoreRepos = true
         defer { isLoading = false }
         
         do {
-            let service = GitHubService(token: token)
-            self.repositories = try await service.fetchRepositories()
+            let service = gitHubServiceFactory(token)
+            let repos = try await service.fetchRepositories(page: 1)
+            self.repositories = repos
+            
+            // 페이지 크기보다 적으면 더 이상 데이터가 없는 것으로 판단
+            if repos.isEmpty || repos.count < pageSize {
+                hasMoreRepos = false
+            }
         } catch {
             print("Failed to fetch repos: \(error)")
+        }
+    }
+    
+    func loadMoreRepositories() async {
+        guard let token = accessToken, !isLoadingMore, hasMoreRepos else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+        
+        let nextPage = currentPage + 1
+        
+        do {
+            let service = gitHubServiceFactory(token)
+            let repos = try await service.fetchRepositories(page: nextPage)
+            
+            if repos.isEmpty {
+                hasMoreRepos = false
+                return
+            }
+            
+            self.repositories.append(contentsOf: repos)
+            self.currentPage = nextPage
+            
+            if repos.count < pageSize {
+                hasMoreRepos = false
+            }
+        } catch {
+            print("Failed to load more repos: \(error)")
         }
     }
     

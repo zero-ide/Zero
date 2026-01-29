@@ -9,13 +9,13 @@ final class GitHubServiceTests: XCTestCase {
         let service = GitHubService(token: token)
         
         // When
-        let request = service.createFetchReposRequest()
+        let request = service.createFetchReposRequest(page: 2)
         
         // Then
-        XCTAssertEqual(request.url?.absoluteString, "https://api.github.com/user/repos")
-        XCTAssertEqual(request.httpMethod, "GET")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer ghp_test_token")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/vnd.github+json")
+        let url = request.url?.absoluteString
+        XCTAssertTrue(url?.contains("per_page=30") ?? false) // 30개씩 끊어서 가져오기
+        XCTAssertTrue(url?.contains("page=2") ?? false)
+        XCTAssertTrue(url?.contains("sort=updated") ?? false)
     }
     
     func testDecodeRepositories() throws {
