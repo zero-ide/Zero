@@ -20,11 +20,14 @@ class ExecutionService: ObservableObject {
     func run(container: String, command: String) async {
         await MainActor.run {
             self.status = .running
-            // output 초기화하지 않음 (이전 로그 유지)
+            // output 초기화하지 않음
         }
         
         do {
-            // /workspace로 이동 후 실행
+            // 1. 환경 설정 (런타임 설치)
+            try await setupEnvironment(for: command, container: container)
+            
+            // 2. /workspace로 이동 후 실행
             let fullCommand = "cd /workspace && \(command)"
             let result = try dockerService.executeShell(container: container, script: fullCommand)
             
@@ -35,8 +38,24 @@ class ExecutionService: ObservableObject {
         } catch {
             await MainActor.run {
                 self.status = .failed(error.localizedDescription)
-                self.output += "\n❌ Execution Error: \(error.localizedDescription)"
+                self.output += "\n❌ Error: \(error.localizedDescription)"
             }
+        }
+    }
+    
+    private func setupEnvironment(for command: String, container: String) async throws {
+        if command.contains("npm") {
+            await MainActor.run { self.output += "\n📦 Installing Node.js..." }
+            _ = try dockerService.executeShell(container: container, script: "apk add --no-cache nodejs npm")
+        } else if command.contains("python") {
+            await MainActor.run { self.output += "\n📦 Installing Python..." }
+            _ = try dockerService.executeShell(container: container, script: "apk add --no-cache python3")
+        } else if command.contains("javac") {
+            await MainActor.run { self.output += "\n📦 Installing Java..." }
+            _ = try dockerService.executeShell(container: container, script: "apk add --no-cache openjdk21")
+        } else if command.contains("go") {
+            await MainActor.run { self.output += "\n📦 Installing Go..." }
+            _ = try dockerService.executeShell(container: container, script: "apk add --no-cache go")
         }
     }
     
