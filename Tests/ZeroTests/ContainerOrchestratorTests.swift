@@ -10,6 +10,10 @@ class MockDockerService: DockerRunning, ContainerRunning {
         return "mock output"
     }
     
+    func executeShell(container: String, script: String) throws -> String {
+        return "mock shell output"
+    }
+    
     func runContainer(image: String, name: String) throws -> String {
         didRunContainer = true
         lastContainerName = name

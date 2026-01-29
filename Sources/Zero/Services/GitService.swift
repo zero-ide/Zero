@@ -2,6 +2,7 @@ import Foundation
 
 protocol ContainerRunning {
     func executeCommand(container: String, command: String) throws -> String
+    func executeShell(container: String, script: String) throws -> String
 }
 
 extension DockerService: ContainerRunning {}
@@ -29,8 +30,8 @@ struct GitService {
         }
         
         // /workspace 디렉토리 생성 후 해당 경로에 Clone
-        let command = "sh -c 'mkdir -p /workspace && cd /workspace && git clone \(authenticatedURL) .'"
+        let command = "mkdir -p /workspace && cd /workspace && git clone \(authenticatedURL) ."
         
-        _ = try runner.executeCommand(container: containerName, command: command)
+        _ = try runner.executeShell(container: containerName, script: command)
     }
 }
