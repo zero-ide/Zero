@@ -12,6 +12,9 @@ struct EditorView: View {
     @State private var statusMessage: String = ""
     @State private var cursorLine: Int = 1
     @State private var cursorColumn: Int = 1
+    @State private var showTerminal: Bool = false
+    
+    @EnvironmentObject var appState: AppState
     
     private var fileService: FileService {
         FileService(containerName: session.containerName)
@@ -95,6 +98,12 @@ struct EditorView: View {
                         }
                     }
                     
+                    if showTerminal {
+                        Divider()
+                        OutputView(executionService: appState.executionService)
+                            .transition(.move(edge: .bottom))
+                    }
+                    
                     Divider()
                     
                     // 상태 표시줄
@@ -127,6 +136,12 @@ struct EditorView: View {
         .navigationTitle("Zero")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                Button(action: runCode) {
+                    Label("Run", systemImage: "play.fill")
+                }
+                .keyboardShortcut("r", modifiers: .command)
+                .disabled(appState.executionService.status == .running)
+                
                 Button(action: saveFile) {
                     if isSaving {
                         ProgressView()
@@ -138,14 +153,45 @@ struct EditorView: View {
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(selectedFile == nil || isSaving)
                 
-                Button(action: {}) {
+                Button(action: { 
+                    withAnimation { showTerminal.toggle() }
+                }) {
                     Label("Terminal", systemImage: "terminal")
+                        .foregroundStyle(showTerminal ? Color.accentColor : Color.primary)
                 }
             }
         }
     }
     
     // MARK: - Helpers
+    
+    private func runCode() {
+        withAnimation { showTerminal = true }
+        Task {
+            // UI 즉시 업데이트
+            await MainActor.run {
+                appState.executionService.status = .running
+                appState.executionService.output = "🔍 Detecting project type..."
+            }
+            
+            do {
+                // 1. 프로젝트 타입 감지
+                let command = try await appState.executionService.detectRunCommand(container: session.containerName)
+                
+                await MainActor.run {
+                    appState.executionService.output += "\n✅ Detected: \(command)\n🚀 Running...\n"
+                }
+                
+                // 2. 실행
+                await appState.executionService.run(container: session.containerName, command: command)
+            } catch {
+                await MainActor.run {
+                    appState.executionService.status = .failed(error.localizedDescription)
+                    appState.executionService.output = "❌ Error: \(error.localizedDescription)\n\nMake sure your project has a Package.swift, package.json, or main file."
+                }
+            }
+        }
+    }
     
     private func loadFile(_ file: FileItem) {
         guard !file.isDirectory else { return }

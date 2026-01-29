@@ -2,7 +2,7 @@ import XCTest
 @testable import Zero
 
 // Mock implementations for testing
-class MockDockerService: DockerRunning, ContainerRunning {
+class MockDockerService: DockerServiceProtocol {
     var didRunContainer = false
     var lastContainerName: String?
     var lastImageName: String?
@@ -12,6 +12,8 @@ class MockDockerService: DockerRunning, ContainerRunning {
     var executedScript: String? {
         return executedScripts.last
     }
+    
+    func checkInstallation() throws -> Bool { return true }
     
     func executeCommand(container: String, command: String) throws -> String {
         return "mock output"
@@ -28,6 +30,13 @@ class MockDockerService: DockerRunning, ContainerRunning {
         lastImageName = image
         return "container-id-123"
     }
+    
+    func listFiles(container: String, path: String) throws -> String { return "" }
+    func readFile(container: String, path: String) throws -> String { return "" }
+    func writeFile(container: String, path: String, content: String) throws {}
+    func stopContainer(name: String) throws {}
+    func removeContainer(name: String) throws {}
+    func fileExists(container: String, path: String) throws -> Bool { return true }
 }
 
 final class ContainerOrchestratorTests: XCTestCase {
