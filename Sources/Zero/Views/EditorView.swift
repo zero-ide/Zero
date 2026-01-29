@@ -19,7 +19,6 @@ struct EditorView: View {
     
     var body: some View {
         NavigationSplitView {
-            // Sidebar: File Explorer
             FileExplorerView(
                 selectedFile: $selectedFile,
                 containerName: session.containerName,
@@ -27,76 +26,62 @@ struct EditorView: View {
             )
             .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 400)
         } detail: {
-            // Main: Editor Area
             ZStack {
-                // 배경 그라데이션
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.96, green: 0.96, blue: 0.98),
-                        Color(red: 0.92, green: 0.93, blue: 0.97)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                // 배경
+                Color(nsColor: .windowBackgroundColor)
+                    .ignoresSafeArea()
                 
+                // 에디터 카드 (모든 모서리 일관되게 둥글게)
                 VStack(spacing: 0) {
-                    // Tab bar (Breadcrumb 스타일)
-                    HStack(spacing: 8) {
-                        // Breadcrumb
-                        HStack(spacing: 4) {
-                            Image(systemName: "folder.fill")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
+                    // 헤더 (Breadcrumb)
+                    HStack(spacing: 6) {
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                        
+                        Text(session.repoURL.lastPathComponent.replacingOccurrences(of: ".git", with: ""))
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                        
+                        if let file = selectedFile {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.quaternary)
                             
-                            Text(session.repoURL.lastPathComponent.replacingOccurrences(of: ".git", with: ""))
+                            Image(systemName: iconForFile(file.name))
                                 .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(colorForFile(file.name))
                             
-                            if let file = selectedFile {
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.tertiary)
-                                
-                                Image(systemName: iconForFile(file.name))
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(colorForFile(file.name))
-                                
-                                Text(file.name)
-                                    .font(.system(size: 13, weight: .medium))
-                                
-                                if hasUnsavedChanges {
-                                    Circle()
-                                        .fill(.orange)
-                                        .frame(width: 8, height: 8)
-                                }
+                            Text(file.name)
+                                .font(.system(size: 13, weight: .medium))
+                            
+                            if hasUnsavedChanges {
+                                Circle()
+                                    .fill(.orange)
+                                    .frame(width: 7, height: 7)
                             }
                         }
                         
                         Spacer()
                         
-                        // Status indicators
-                        HStack(spacing: 12) {
-                            if isLoadingFile {
-                                ProgressView()
-                                    .scaleEffect(0.6)
-                            }
-                            
-                            if !statusMessage.isEmpty {
-                                Text(statusMessage)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(.ultraThinMaterial, in: Capsule())
-                            }
+                        if isLoadingFile {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                        }
+                        
+                        if !statusMessage.isEmpty {
+                            Text(statusMessage)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(.ultraThinMaterial)
+                    .background(Color(nsColor: .controlBackgroundColor))
                     
-                    // Editor
+                    Divider()
+                    
+                    // 에디터
                     CodeEditorView(
                         content: $fileContent,
                         language: currentLanguage,
@@ -106,55 +91,45 @@ struct EditorView: View {
                             cursorColumn = column
                         }
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.white.opacity(0.8), lineWidth: 1)
-                    )
-                    .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 8)
                     .onChange(of: fileContent) { _, _ in
                         if !isLoadingFile {
                             hasUnsavedChanges = true
                         }
                     }
                     
-                    // 하단 상태 표시줄
-                    HStack(spacing: 16) {
-                        // 언어 모드
+                    Divider()
+                    
+                    // 상태 표시줄
+                    HStack(spacing: 12) {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.left.forwardslash.chevron.right")
-                                .font(.system(size: 10))
+                                .font(.system(size: 9))
                             Text(languageDisplayName(currentLanguage))
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(size: 11))
                         }
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.ultraThinMaterial, in: Capsule())
                         
                         Spacer()
                         
-                        // 커서 위치
-                        HStack(spacing: 4) {
-                            Text("Ln \(cursorLine), Col \(cursorColumn)")
-                                .font(.system(size: 11, design: .monospaced))
-                        }
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.ultraThinMaterial, in: Capsule())
+                        Text("Ln \(cursorLine), Col \(cursorColumn)")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
                         
-                        // 인코딩
                         Text("UTF-8")
                             .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Color(nsColor: .controlBackgroundColor))
                 }
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.black.opacity(0.1), lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(0.06), radius: 6, x: 0, y: 2)
+                .padding(12)
             }
         }
         .navigationTitle("Zero")
@@ -178,7 +153,7 @@ struct EditorView: View {
         }
     }
     
-    // MARK: - Helper Functions
+    // MARK: - Helpers
     
     private func iconForFile(_ filename: String) -> String {
         let ext = (filename as NSString).pathExtension.lowercased()
@@ -255,8 +230,8 @@ struct EditorView: View {
                 }
             } catch {
                 await MainActor.run {
-                    fileContent = "// Error loading file: \(error.localizedDescription)"
-                    statusMessage = "Load failed"
+                    fileContent = "// Error: \(error.localizedDescription)"
+                    statusMessage = "Failed"
                     isLoadingFile = false
                 }
             }
@@ -278,14 +253,12 @@ struct EditorView: View {
                     isSaving = false
                     
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        if statusMessage == "Saved" {
-                            statusMessage = ""
-                        }
+                        if statusMessage == "Saved" { statusMessage = "" }
                     }
                 }
             } catch {
                 await MainActor.run {
-                    statusMessage = "Save failed"
+                    statusMessage = "Failed"
                     isSaving = false
                 }
             }
@@ -309,7 +282,7 @@ struct EditorView: View {
         case "xml": return "xml"
         case "sh": return "shell"
         case "c", "h": return "c"
-        case "cpp", "hpp", "cc": return "cpp"
+        case "cpp", "hpp": return "cpp"
         case "go": return "go"
         case "rs": return "rust"
         case "rb": return "ruby"

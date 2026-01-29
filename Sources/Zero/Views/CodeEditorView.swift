@@ -6,7 +6,7 @@ struct CodeEditorView: NSViewRepresentable {
     @Binding var content: String
     var language: String
     var onReady: (() -> Void)?
-    var onCursorChange: ((Int, Int) -> Void)?  // (line, column)
+    var onCursorChange: ((Int, Int) -> Void)?
     
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -14,26 +14,25 @@ struct CodeEditorView: NSViewRepresentable {
         scrollView.hasHorizontalScroller = true
         scrollView.drawsBackground = true
         scrollView.backgroundColor = .white
-        scrollView.scrollerStyle = .overlay  // 얇은 오버레이 스크롤바
+        scrollView.scrollerStyle = .overlay
         scrollView.autohidesScrollers = true
         
-        // 줄 번호 뷰를 포함한 컨테이너
-        let containerView = EditorContainerView(frame: .zero)
-        containerView.setup(language: language)
-        containerView.onTextChange = { newText in
+        let textView = HighlightedTextView(frame: .zero)
+        textView.setup(language: language)
+        textView.onTextChange = { newText in
             context.coordinator.isEditing = true
             context.coordinator.parent.content = newText
             context.coordinator.isEditing = false
         }
-        containerView.onCursorChange = { line, column in
+        textView.onCursorChange = { line, column in
             context.coordinator.parent.onCursorChange?(line, column)
         }
         
-        scrollView.documentView = containerView
-        context.coordinator.containerView = containerView
+        scrollView.documentView = textView
+        context.coordinator.textView = textView
         
         DispatchQueue.main.async {
-            containerView.setText(content, language: language)
+            textView.setText(content, language: language)
             onReady?()
         }
         
@@ -41,10 +40,10 @@ struct CodeEditorView: NSViewRepresentable {
     }
     
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let containerView = context.coordinator.containerView else { return }
+        guard let textView = context.coordinator.textView else { return }
         
-        if !context.coordinator.isEditing && containerView.textView.string != content {
-            containerView.setText(content, language: language)
+        if !context.coordinator.isEditing && textView.string != content {
+            textView.setText(content, language: language)
         }
     }
     
@@ -54,137 +53,11 @@ struct CodeEditorView: NSViewRepresentable {
     
     class Coordinator {
         var parent: CodeEditorView
-        var containerView: EditorContainerView?
+        var textView: HighlightedTextView?
         var isEditing = false
         
         init(_ parent: CodeEditorView) {
             self.parent = parent
-        }
-    }
-}
-
-// MARK: - Editor Container (줄 번호 + 텍스트 뷰)
-class EditorContainerView: NSView {
-    let lineNumberView = LineNumberView()
-    let textView = HighlightedTextView(frame: .zero)
-    
-    var onTextChange: ((String) -> Void)? {
-        didSet { textView.onTextChange = onTextChange }
-    }
-    var onCursorChange: ((Int, Int) -> Void)?
-    
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        setupViews()
-    }
-    
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        setupViews()
-    }
-    
-    private func setupViews() {
-        // 줄 번호 뷰
-        lineNumberView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(lineNumberView)
-        
-        // 텍스트 뷰
-        textView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(textView)
-        
-        NSLayoutConstraint.activate([
-            lineNumberView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            lineNumberView.topAnchor.constraint(equalTo: topAnchor),
-            lineNumberView.bottomAnchor.constraint(equalTo: bottomAnchor),
-            lineNumberView.widthAnchor.constraint(equalToConstant: 50),
-            
-            textView.leadingAnchor.constraint(equalTo: lineNumberView.trailingAnchor),
-            textView.topAnchor.constraint(equalTo: topAnchor),
-            textView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            textView.bottomAnchor.constraint(equalTo: bottomAnchor)
-        ])
-        
-        textView.lineNumberView = lineNumberView
-        textView.onSelectionChange = { [weak self] in
-            self?.updateCursorPosition()
-        }
-    }
-    
-    func setup(language: String) {
-        textView.setup(language: language)
-    }
-    
-    func setText(_ text: String, language: String) {
-        textView.setText(text, language: language)
-        lineNumberView.updateLineNumbers(for: text)
-    }
-    
-    private func updateCursorPosition() {
-        let selectedRange = textView.selectedRange()
-        let text = textView.string as NSString
-        
-        var line = 1
-        var column = 1
-        
-        let location = min(selectedRange.location, text.length)
-        let textUpToCursor = text.substring(to: location)
-        
-        for char in textUpToCursor {
-            if char == "\n" {
-                line += 1
-                column = 1
-            } else {
-                column += 1
-            }
-        }
-        
-        onCursorChange?(line, column)
-    }
-    
-    override var intrinsicContentSize: NSSize {
-        return NSSize(width: NSView.noIntrinsicMetric, height: max(textView.intrinsicContentSize.height, 500))
-    }
-}
-
-// MARK: - Line Number View
-class LineNumberView: NSView {
-    private var lineCount = 1
-    
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor(red: 0.97, green: 0.97, blue: 0.98, alpha: 1.0).cgColor
-    }
-    
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-    }
-    
-    func updateLineNumbers(for text: String) {
-        lineCount = max(1, text.components(separatedBy: "\n").count)
-        needsDisplay = true
-    }
-    
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = .right
-        
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
-            .foregroundColor: NSColor.tertiaryLabelColor,
-            .paragraphStyle: paragraphStyle
-        ]
-        
-        let lineHeight: CGFloat = 18.5  // 텍스트 뷰와 맞춤
-        var y: CGFloat = 12  // 상단 패딩
-        
-        for i in 1...lineCount {
-            let lineString = "\(i)"
-            let rect = NSRect(x: 4, y: bounds.height - y - lineHeight, width: bounds.width - 12, height: lineHeight)
-            lineString.draw(in: rect, withAttributes: attributes)
-            y += lineHeight
         }
     }
 }
@@ -194,8 +67,7 @@ class HighlightedTextView: NSTextView {
     private var highlightr: Highlightr?
     private var currentLanguage: String = "plaintext"
     var onTextChange: ((String) -> Void)?
-    var onSelectionChange: (() -> Void)?
-    weak var lineNumberView: LineNumberView?
+    var onCursorChange: ((Int, Int) -> Void)?
     
     func setup(language: String) {
         self.currentLanguage = language
@@ -216,7 +88,7 @@ class HighlightedTextView: NSTextView {
         
         font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         
-        textContainerInset = NSSize(width: 8, height: 12)
+        textContainerInset = NSSize(width: 16, height: 16)
         textContainer?.lineFragmentPadding = 0
         
         isVerticallyResizable = true
@@ -247,20 +119,42 @@ class HighlightedTextView: NSTextView {
             textStorage?.setAttributedString(plainAttr)
         }
         
-        lineNumberView?.updateLineNumbers(for: text)
+        updateCursorPosition()
     }
     
     override func didChangeText() {
         super.didChangeText()
         onTextChange?(string)
-        lineNumberView?.updateLineNumbers(for: string)
     }
     
     override func setSelectedRange(_ charRange: NSRange, affinity: NSSelectionAffinity, stillSelecting stillSelectingFlag: Bool) {
         super.setSelectedRange(charRange, affinity: affinity, stillSelecting: stillSelectingFlag)
         if !stillSelectingFlag {
-            onSelectionChange?()
+            updateCursorPosition()
         }
+    }
+    
+    private func updateCursorPosition() {
+        let selectedRange = selectedRange()
+        let text = string as NSString
+        
+        var line = 1
+        var column = 1
+        
+        let location = min(selectedRange.location, text.length)
+        if location > 0 {
+            let textUpToCursor = text.substring(to: location)
+            for char in textUpToCursor {
+                if char == "\n" {
+                    line += 1
+                    column = 1
+                } else {
+                    column += 1
+                }
+            }
+        }
+        
+        onCursorChange?(line, column)
     }
     
     private func mapLanguage(_ lang: String) -> String {
