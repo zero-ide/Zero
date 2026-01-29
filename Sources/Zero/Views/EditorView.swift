@@ -45,13 +45,15 @@ struct EditorView: View {
                             .foregroundStyle(.secondary)
                         
                         if let file = selectedFile {
+                            let iconInfo = FileIconHelper.iconInfo(for: file.name, isDirectory: false)
+                            
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 9))
                                 .foregroundStyle(.quaternary)
                             
-                            Image(systemName: iconForFile(file.name))
+                            Image(systemName: iconInfo.name)
                                 .font(.system(size: 12))
-                                .foregroundStyle(colorForFile(file.name))
+                                .foregroundStyle(iconInfo.color)
                             
                             Text(file.name)
                                 .font(.system(size: 13, weight: .medium))
@@ -100,7 +102,7 @@ struct EditorView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.left.forwardslash.chevron.right")
                                 .font(.system(size: 9))
-                            Text(languageDisplayName(currentLanguage))
+                            Text(FileIconHelper.languageDisplayName(currentLanguage))
                                 .font(.system(size: 11))
                         }
                         .foregroundStyle(.secondary)
@@ -145,68 +147,11 @@ struct EditorView: View {
     
     // MARK: - Helpers
     
-    private func iconForFile(_ filename: String) -> String {
-        let ext = (filename as NSString).pathExtension.lowercased()
-        switch ext {
-        case "swift": return "swift"
-        case "java", "kt", "kts": return "cup.and.saucer.fill"
-        case "js": return "j.square.fill"
-        case "ts": return "t.square.fill"
-        case "py": return "p.square.fill"
-        case "json": return "curlybraces"
-        case "md": return "doc.richtext.fill"
-        case "html", "css": return "globe"
-        case "yml", "yaml": return "list.bullet.rectangle.fill"
-        case "sh": return "terminal.fill"
-        case "dockerfile": return "shippingbox.fill"
-        default: return "doc.text.fill"
-        }
-    }
-    
-    private func colorForFile(_ filename: String) -> Color {
-        let ext = (filename as NSString).pathExtension.lowercased()
-        switch ext {
-        case "swift": return .orange
-        case "java": return .red
-        case "kt", "kts": return .purple
-        case "js": return .yellow
-        case "ts": return .blue
-        case "py": return .cyan
-        case "json": return .yellow
-        case "md": return .blue
-        case "html": return .orange
-        case "css": return .pink
-        case "yml", "yaml": return .pink
-        case "sh": return .green
-        default: return .secondary
-        }
-    }
-    
-    private func languageDisplayName(_ lang: String) -> String {
-        switch lang {
-        case "swift": return "Swift"
-        case "java": return "Java"
-        case "kotlin": return "Kotlin"
-        case "javascript": return "JavaScript"
-        case "typescript": return "TypeScript"
-        case "python": return "Python"
-        case "json": return "JSON"
-        case "html": return "HTML"
-        case "css": return "CSS"
-        case "markdown": return "Markdown"
-        case "yaml": return "YAML"
-        case "shell": return "Shell"
-        case "dockerfile": return "Dockerfile"
-        case "plaintext": return "Plain Text"
-        default: return lang.capitalized
-        }
-    }
-    
     private func loadFile(_ file: FileItem) {
         guard !file.isDirectory else { return }
         
         isLoadingFile = true
-        currentLanguage = detectLanguage(for: file.name)
+        currentLanguage = FileIconHelper.languageName(for: file.name)
         
         Task {
             do {
@@ -251,34 +196,6 @@ struct EditorView: View {
                     isSaving = false
                 }
             }
-        }
-    }
-    
-    private func detectLanguage(for filename: String) -> String {
-        let ext = (filename as NSString).pathExtension.lowercased()
-        switch ext {
-        case "swift": return "swift"
-        case "js": return "javascript"
-        case "ts": return "typescript"
-        case "py": return "python"
-        case "java": return "java"
-        case "kt", "kts": return "kotlin"
-        case "json": return "json"
-        case "html": return "html"
-        case "css": return "css"
-        case "md": return "markdown"
-        case "yaml", "yml": return "yaml"
-        case "xml": return "xml"
-        case "sh": return "shell"
-        case "c", "h": return "c"
-        case "cpp", "hpp": return "cpp"
-        case "go": return "go"
-        case "rs": return "rust"
-        case "rb": return "ruby"
-        case "php": return "php"
-        case "sql": return "sql"
-        case "dockerfile": return "dockerfile"
-        default: return "plaintext"
         }
     }
 }

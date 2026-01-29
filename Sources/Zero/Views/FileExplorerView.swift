@@ -226,56 +226,10 @@ struct FileRowView: View {
     
     @ViewBuilder
     private var fileIconView: some View {
-        let (iconName, iconColor) = fileIconInfo(for: file)
-        
-        if file.isDirectory {
-            Image(systemName: isExpanded ? "folder.fill" : "folder.fill")
-                .font(.system(size: 14))
-                .foregroundStyle(Color.yellow)
-        } else {
-            Image(systemName: iconName)
-                .font(.system(size: 13))
-                .foregroundStyle(iconColor)
-        }
-    }
-    
-    private func fileIconInfo(for file: FileItem) -> (String, Color) {
-        let ext = (file.name as NSString).pathExtension.lowercased()
-        let name = file.name.lowercased()
-        
-        // Special files
-        if name == "dockerfile" { return ("shippingbox.fill", .blue) }
-        if name == "readme.md" { return ("book.fill", .blue) }
-        if name == ".gitignore" { return ("eye.slash", .orange) }
-        if name.contains("license") { return ("doc.text.fill", .green) }
-        
-        switch ext {
-        case "swift": return ("swift", .orange)
-        case "java": return ("cup.and.saucer.fill", .red)
-        case "kt", "kts": return ("k.square.fill", .purple)
-        case "js": return ("j.square.fill", .yellow)
-        case "ts": return ("t.square.fill", .blue)
-        case "py": return ("p.square.fill", .cyan)
-        case "rb": return ("r.square.fill", .red)
-        case "go": return ("g.square.fill", .cyan)
-        case "rs": return ("r.square.fill", .orange)
-        case "json": return ("curlybraces", .yellow)
-        case "xml", "plist": return ("chevron.left.forwardslash.chevron.right", .orange)
-        case "html": return ("globe", .orange)
-        case "css", "scss", "sass": return ("paintbrush.fill", .pink)
-        case "md", "markdown": return ("doc.richtext.fill", .blue)
-        case "yml", "yaml": return ("list.bullet.rectangle.fill", .pink)
-        case "sh", "bash", "zsh": return ("terminal.fill", .green)
-        case "sql": return ("cylinder.fill", .blue)
-        case "png", "jpg", "jpeg", "gif", "svg", "ico": return ("photo.fill", .purple)
-        case "pdf": return ("doc.fill", .red)
-        case "zip", "tar", "gz", "rar": return ("doc.zipper", .gray)
-        case "gradle": return ("g.square.fill", .green)
-        case "properties": return ("gearshape.fill", .gray)
-        case "env": return ("key.fill", .yellow)
-        case "lock": return ("lock.fill", .gray)
-        default: return ("doc.fill", .secondary)
-        }
+        let info = FileIconHelper.iconInfo(for: file.name, isDirectory: file.isDirectory)
+        Image(systemName: info.name)
+            .font(.system(size: file.isDirectory ? 14 : 13))
+            .foregroundStyle(info.color)
     }
     
     private func toggleExpand() {
