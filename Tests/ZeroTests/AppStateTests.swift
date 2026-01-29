@@ -3,12 +3,25 @@ import XCTest
 
 class MockGitHubService: GitHubService {
     var mockRepos: [Repository] = []
+    var mockOrgs: [Organization] = []
     var fetchCallCount = 0
     var lastPage = 0
+    var lastOrg: String?
     
-    override func fetchRepositories(page: Int = 1) async throws -> [Repository] {
+    override func fetchRepositories(page: Int = 1, type: String? = nil) async throws -> [Repository] {
         fetchCallCount += 1
         lastPage = page
+        return mockRepos
+    }
+    
+    override func fetchOrganizations() async throws -> [Organization] {
+        return mockOrgs
+    }
+    
+    override func fetchOrgRepositories(org: String, page: Int = 1) async throws -> [Repository] {
+        fetchCallCount += 1
+        lastPage = page
+        lastOrg = org
         return mockRepos
     }
 }
@@ -58,5 +71,33 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.repositories.count, 2) // repo1 + repo2
         XCTAssertEqual(appState.currentPage, 2)
         XCTAssertEqual(mockService.lastPage, 2)
+    }
+    
+    func testFetchOrgsAndSelect() async {
+        // Given
+        let mockService = MockGitHubService(token: "test")
+        let org1 = Organization(id: 1, login: "org1", avatarURL: nil, description: nil)
+        mockService.mockOrgs = [org1]
+        let repo1 = Repository(id: 1, name: "org-repo", fullName: "org1/repo", isPrivate: false, htmlURL: URL(string: "http://a")!, cloneURL: URL(string: "http://a")!)
+        
+        let appState = AppState()
+        appState.accessToken = "test"
+        appState.gitHubServiceFactory = { _ in mockService }
+        
+        // When
+        await appState.fetchOrganizations()
+        
+        // Then
+        XCTAssertEqual(appState.organizations.count, 1)
+        XCTAssertEqual(appState.organizations.first?.login, "org1")
+        
+        // Select Org and Fetch Repos
+        appState.selectedOrg = org1
+        mockService.mockRepos = [repo1]
+        await appState.fetchRepositories()
+        
+        XCTAssertEqual(appState.repositories.count, 1)
+        XCTAssertEqual(appState.repositories.first?.name, "org-repo")
+        XCTAssertEqual(mockService.lastOrg, "org1")
     }
 }

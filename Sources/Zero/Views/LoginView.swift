@@ -4,6 +4,7 @@ struct LoginView: View {
     @EnvironmentObject var appState: AppState
     @State private var tokenInput: String = ""
     @State private var showError: Bool = false
+    @FocusState private var isTokenFocused: Bool
     
     var body: some View {
         VStack(spacing: 24) {
@@ -32,6 +33,7 @@ struct LoginView: View {
                 SecureField("ghp_xxxx...", text: $tokenInput)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 300)
+                    .focused($isTokenFocused)
             }
             
             Button("Sign In") {
@@ -48,6 +50,9 @@ struct LoginView: View {
         }
         .padding(40)
         .frame(minWidth: 400, minHeight: 350)
+        .onAppear {
+            isTokenFocused = true
+        }
     }
     
     private func signIn() {
