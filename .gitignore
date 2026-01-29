@@ -6,3 +6,5 @@
 !*.xcodeproj/xcshareddata/
 !*.xcodeproj/project.xcworkspace/
 .swiftpm/
+*.app
+*.dmg
