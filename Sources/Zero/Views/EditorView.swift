@@ -16,52 +16,55 @@ struct EditorView: View {
     }
     
     var body: some View {
-        HSplitView {
-            // Left: File Explorer
+        NavigationSplitView {
+            // Sidebar: File Explorer (플로팅 스타일)
             FileExplorerView(
                 selectedFile: $selectedFile,
                 containerName: session.containerName,
                 onFileSelect: loadFile
             )
-            .frame(minWidth: 180, idealWidth: 220, maxWidth: 300)
-            
-            // Center: Monaco Editor
+            .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 350)
+        } detail: {
+            // Main: Editor Area
             VStack(spacing: 0) {
                 // Tab bar
-                if let file = selectedFile {
-                    HStack {
-                        Image(systemName: "doc.text")
+                HStack {
+                    if let file = selectedFile {
+                        Image(systemName: iconForFile(file.name))
                             .foregroundStyle(.secondary)
                         Text(file.name)
-                            .font(.system(size: 12))
+                            .font(.system(size: 13, weight: .medium))
                         
                         if hasUnsavedChanges {
                             Circle()
                                 .fill(.orange)
                                 .frame(width: 8, height: 8)
                         }
-                        
-                        Spacer()
-                        
-                        if isLoadingFile {
-                            ProgressView()
-                                .scaleEffect(0.6)
-                        }
-                        
-                        if !statusMessage.isEmpty {
-                            Text(statusMessage)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                    } else {
+                        Text("No file selected")
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color(nsColor: .controlBackgroundColor))
                     
-                    Divider()
+                    Spacer()
+                    
+                    if isLoadingFile {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                    }
+                    
+                    if !statusMessage.isEmpty {
+                        Text(statusMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.bar)
                 
-                // Editor (Native)
+                Divider()
+                
+                // Editor (플로팅 카드 스타일)
                 CodeEditorView(
                     content: $fileContent,
                     language: currentLanguage,
@@ -69,13 +72,15 @@ struct EditorView: View {
                         isEditorReady = true
                     }
                 )
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .padding(12)
                 .onChange(of: fileContent) { _, _ in
                     if !isLoadingFile {
                         hasUnsavedChanges = true
                     }
                 }
             }
-            .frame(minWidth: 400)
+            .background(Color(nsColor: .windowBackgroundColor))
         }
         .navigationTitle("Zero - \(session.repoURL.lastPathComponent.replacingOccurrences(of: ".git", with: ""))")
         .toolbar {
@@ -95,6 +100,23 @@ struct EditorView: View {
                     Label("Terminal", systemImage: "terminal")
                 }
             }
+        }
+    }
+    
+    private func iconForFile(_ filename: String) -> String {
+        let ext = (filename as NSString).pathExtension.lowercased()
+        switch ext {
+        case "swift": return "swift"
+        case "java", "kt", "kts": return "cup.and.saucer.fill"
+        case "js", "ts": return "j.square.fill"
+        case "py": return "p.square.fill"
+        case "json": return "curlybraces"
+        case "md": return "doc.richtext"
+        case "html", "css": return "globe"
+        case "yml", "yaml": return "list.bullet.rectangle"
+        case "sh": return "terminal"
+        case "dockerfile": return "shippingbox"
+        default: return "doc.text"
         }
     }
     
@@ -138,7 +160,6 @@ struct EditorView: View {
                     statusMessage = "Saved"
                     isSaving = false
                     
-                    // 2초 후 상태 메시지 제거
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                         if statusMessage == "Saved" {
                             statusMessage = ""
@@ -162,6 +183,7 @@ struct EditorView: View {
         case "ts": return "typescript"
         case "py": return "python"
         case "java": return "java"
+        case "kt", "kts": return "kotlin"
         case "json": return "json"
         case "html": return "html"
         case "css": return "css"
