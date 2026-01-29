@@ -28,9 +28,8 @@ struct GitService {
             return
         }
         
-        // 컨테이너 내부의 작업 디렉토리(ex: /workspace)로 Clone
-        // (현재는 기본 경로에 Clone 가정)
-        let command = "git clone \(authenticatedURL) ."
+        // /workspace 디렉토리 생성 후 해당 경로에 Clone
+        let command = "sh -c 'mkdir -p /workspace && cd /workspace && git clone \(authenticatedURL) .'"
         
         _ = try runner.executeCommand(container: containerName, command: command)
     }
