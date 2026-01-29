@@ -13,9 +13,14 @@ struct FileExplorerView: View {
     @Binding var selectedFile: FileItem?
     @State private var files: [FileItem] = []
     @State private var isLoading = true
+    @State private var errorMessage: String?
     
     let containerName: String
     let onFileSelect: (FileItem) -> Void
+    
+    private var fileService: FileService {
+        FileService(containerName: containerName)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -37,8 +42,28 @@ struct FileExplorerView: View {
             
             // File Tree
             if isLoading {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack {
+                    ProgressView()
+                    Text("Loading files...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let error = errorMessage {
+                VStack {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(.yellow)
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                    Button("Retry") {
+                        refreshFiles()
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if files.isEmpty {
                 Text("No files")
                     .foregroundStyle(.secondary)
@@ -51,7 +76,8 @@ struct FileExplorerView: View {
                                 file: file,
                                 selectedFile: $selectedFile,
                                 level: 0,
-                                onSelect: onFileSelect
+                                onSelect: onFileSelect,
+                                onExpand: loadChildren
                             )
                         }
                     }
@@ -74,18 +100,28 @@ struct FileExplorerView: View {
     
     private func loadFiles() async {
         isLoading = true
+        errorMessage = nil
         defer { isLoading = false }
         
-        // TODO: docker exec ls -la /workspace 실행해서 파일 목록 가져오기
-        // 지금은 mock 데이터
-        files = [
-            FileItem(name: "src", path: "/workspace/src", isDirectory: true, children: [
-                FileItem(name: "main.swift", path: "/workspace/src/main.swift", isDirectory: false),
-                FileItem(name: "utils.swift", path: "/workspace/src/utils.swift", isDirectory: false)
-            ]),
-            FileItem(name: "README.md", path: "/workspace/README.md", isDirectory: false),
-            FileItem(name: "Package.swift", path: "/workspace/Package.swift", isDirectory: false)
-        ]
+        do {
+            files = try await fileService.listDirectory()
+        } catch {
+            errorMessage = "Failed to load files: \(error.localizedDescription)"
+            // Fallback to mock data for development
+            files = [
+                FileItem(name: "README.md", path: "/workspace/README.md", isDirectory: false),
+                FileItem(name: "src", path: "/workspace/src", isDirectory: true, children: [])
+            ]
+        }
+    }
+    
+    private func loadChildren(for file: FileItem) async -> [FileItem] {
+        guard file.isDirectory else { return [] }
+        do {
+            return try await fileService.listDirectory(path: file.path)
+        } catch {
+            return []
+        }
     }
 }
 
@@ -94,8 +130,11 @@ struct FileRowView: View {
     @Binding var selectedFile: FileItem?
     let level: Int
     let onSelect: (FileItem) -> Void
+    let onExpand: (FileItem) async -> [FileItem]
     
     @State private var isExpanded = false
+    @State private var children: [FileItem] = []
+    @State private var isLoadingChildren = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -107,10 +146,16 @@ struct FileRowView: View {
                 
                 // Expand/Collapse button for directories
                 if file.isDirectory {
-                    Button(action: { isExpanded.toggle() }) {
-                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                    Button(action: { toggleExpand() }) {
+                        if isLoadingChildren {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                                .frame(width: 16, height: 16)
+                        } else {
+                            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .buttonStyle(.plain)
                     .frame(width: 16)
@@ -136,7 +181,7 @@ struct FileRowView: View {
             .contentShape(Rectangle())
             .onTapGesture {
                 if file.isDirectory {
-                    isExpanded.toggle()
+                    toggleExpand()
                 } else {
                     selectedFile = file
                     onSelect(file)
@@ -144,15 +189,29 @@ struct FileRowView: View {
             }
             
             // Children
-            if file.isDirectory && isExpanded, let children = file.children {
+            if file.isDirectory && isExpanded {
                 ForEach(children) { child in
                     FileRowView(
                         file: child,
                         selectedFile: $selectedFile,
                         level: level + 1,
-                        onSelect: onSelect
+                        onSelect: onSelect,
+                        onExpand: onExpand
                     )
                 }
+            }
+        }
+    }
+    
+    private func toggleExpand() {
+        if isExpanded {
+            isExpanded = false
+        } else {
+            isLoadingChildren = true
+            Task {
+                children = await onExpand(file)
+                isExpanded = true
+                isLoadingChildren = false
             }
         }
     }
@@ -165,6 +224,9 @@ struct FileRowView: View {
         case "json": return "doc.text"
         case "md": return "doc.richtext"
         case "html", "css": return "globe"
+        case "py": return "chevron.left.forwardslash.chevron.right"
+        case "java": return "cup.and.saucer"
+        case "sh": return "terminal"
         default: return "doc"
         }
     }
