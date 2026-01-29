@@ -1,9 +1,14 @@
+<img width="6335" height="2100" alt="image" src="https://github.com/user-attachments/assets/e044e085-4035-4c42-bde3-ca9d4dc431cc" />
+
 # Zero
 
 > **Code without footprints.**  
 > Zero Pollution. Zero Config. Native Experience.
 
+<img width="1312" height="912" alt="image" src="https://github.com/user-attachments/assets/00186d99-b578-4a62-a8fa-093c8dbfcc3e" />
+
 **Zero** is a native macOS IDE designed for ephemeral development. It creates isolated, disposable Docker environments instantly, allowing you to code without polluting your local machine.
+
 
 ## ✨ Features
 
