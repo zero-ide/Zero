@@ -20,6 +20,7 @@ struct FileExplorerView: View {
     @State private var errorMessage: String?
     
     let containerName: String
+    let projectName: String
     let onFileSelect: (FileItem) -> Void
     
     private var fileService: FileService {
@@ -28,6 +29,22 @@ struct FileExplorerView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Project Title
+            HStack(spacing: 8) {
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.blue)
+                Text(projectName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            
+            Divider()
+                .padding(.horizontal, 12)
+            
             // File Tree
             if isLoading {
                 VStack(spacing: 12) {

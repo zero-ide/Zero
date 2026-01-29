@@ -22,6 +22,7 @@ struct EditorView: View {
             FileExplorerView(
                 selectedFile: $selectedFile,
                 containerName: session.containerName,
+                projectName: session.repoURL.lastPathComponent.replacingOccurrences(of: ".git", with: ""),
                 onFileSelect: loadFile
             )
             .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 400)
