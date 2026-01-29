@@ -11,12 +11,16 @@ Implement a build and execution system that allows users to run their code insid
 - **Status Bar**: Show "Running...", "Build Succeeded", or "Failed" status.
 
 ### 2. Execution Logic
-- **Language Detection**: Automatically detect the run command based on the project structure.
-  - Swift: `swift run`
-  - Node.js: `npm start` or `node index.js`
-  - Python: `python3 main.py`
-  - Java: `javac *.java && java Main`
-  - Go: `go run .`
+- **Strategy 1: Dockerfile (Priority)**
+  - If a `Dockerfile` exists in the root, build it and use it as the execution environment.
+  - Useful for projects with custom dependencies.
+- **Strategy 2: Auto-Detect (Zero Config)**
+  - If no `Dockerfile`, detect the language and use a pre-defined lightweight image.
+  - **Swift**: `swift run` (swift:5.9-alpine)
+  - **Node.js**: `npm start` or `node index.js` (node:20-alpine)
+  - **Python**: `python3 main.py` (python:3.11-alpine)
+  - **Java**: `javac *.java && java Main` (openjdk:21-alpine)
+  - **Go**: `go run .` (golang:1.21-alpine)
 - **Custom Command**: Allow users to edit the run command (optional for v1).
 
 ### 3. Docker Integration
