@@ -64,11 +64,6 @@ struct EditorView: View {
                         
                         Spacer()
                         
-                        if isLoadingFile {
-                            ProgressView()
-                                .scaleEffect(0.5)
-                        }
-                        
                         if !statusMessage.isEmpty {
                             Text(statusMessage)
                                 .font(.system(size: 11))
@@ -216,7 +211,6 @@ struct EditorView: View {
         guard !file.isDirectory else { return }
         
         isLoadingFile = true
-        statusMessage = "Loading..."
         currentLanguage = detectLanguage(for: file.name)
         
         Task {
