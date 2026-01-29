@@ -12,7 +12,7 @@ extension DockerService: DockerRunning {}
 class ContainerOrchestrator {
     private let dockerService: DockerRunning
     private let sessionManager: SessionManager
-    private let baseImage = "alpine:latest"
+    private let baseImage = Constants.Docker.baseImage
     
     init(dockerService: DockerRunning, sessionManager: SessionManager) {
         self.dockerService = dockerService

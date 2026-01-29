@@ -19,10 +19,10 @@ class AppState: ObservableObject {
     @Published var selectedOrg: Organization? = nil
     
     // 페이지 크기 (테스트 시 조정 가능)
-    var pageSize: Int = 30
+    var pageSize: Int = Constants.GitHub.pageSize
     
-    private let keychainService = "com.zero.ide"
-    private let keychainAccount = "github_token"
+    private let keychainService = Constants.Keychain.service
+    private let keychainAccount = Constants.Keychain.account
     private let sessionManager = SessionManager()
     private lazy var orchestrator: ContainerOrchestrator = {
         let docker = DockerService()
