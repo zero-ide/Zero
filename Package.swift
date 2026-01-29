@@ -10,14 +10,12 @@ let package = Package(
         .executable(name: "Zero", targets: ["Zero"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/CodeEditApp/CodeEditTextView.git", from: "0.7.0"),
         .package(url: "https://github.com/raspu/Highlightr.git", from: "2.1.0")
     ],
     targets: [
         .executableTarget(
             name: "Zero",
             dependencies: [
-                .product(name: "CodeEditTextView", package: "CodeEditTextView"),
                 .product(name: "Highlightr", package: "Highlightr")
             ],
             path: "Sources/Zero",

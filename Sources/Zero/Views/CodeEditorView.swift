@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-import CodeEditTextView
 import Highlightr
 
 struct CodeEditorView: NSViewRepresentable {
@@ -13,23 +12,22 @@ struct CodeEditorView: NSViewRepresentable {
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
         scrollView.drawsBackground = true
-        scrollView.backgroundColor = NSColor(red: 0.12, green: 0.12, blue: 0.14, alpha: 1.0)
+        scrollView.backgroundColor = NSColor(red: 0.11, green: 0.11, blue: 0.12, alpha: 1.0)
         
-        // Highlightr 기반 TextView 사용
         let textView = HighlightedTextView(frame: .zero)
-        textView.setup(language: language, theme: "atom-one-dark")
-        textView.text = content
+        textView.setup(language: language)
         textView.onTextChange = { newText in
+            context.coordinator.isEditing = true
             context.coordinator.parent.content = newText
+            context.coordinator.isEditing = false
         }
-        
-        textView.translatesAutoresizingMaskIntoConstraints = false
-        textView.autoresizingMask = [.width]
         
         scrollView.documentView = textView
         context.coordinator.textView = textView
         
+        // 초기 content 설정
         DispatchQueue.main.async {
+            textView.setText(content, language: language)
             onReady?()
         }
         
@@ -39,9 +37,9 @@ struct CodeEditorView: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = context.coordinator.textView else { return }
         
-        if textView.text != content && !context.coordinator.isEditing {
-            textView.text = content
-            textView.applyHighlighting(language: language)
+        // 외부에서 content 변경 시에만 업데이트
+        if !context.coordinator.isEditing && textView.string != content {
+            textView.setText(content, language: language)
         }
     }
     
@@ -60,75 +58,78 @@ struct CodeEditorView: NSViewRepresentable {
     }
 }
 
-// MARK: - Highlightr 기반 TextView
+// MARK: - Syntax Highlighting TextView
 class HighlightedTextView: NSTextView {
     private var highlightr: Highlightr?
     private var currentLanguage: String = "plaintext"
     var onTextChange: ((String) -> Void)?
     
-    var text: String {
-        get { string }
-        set {
-            string = newValue
-            applyHighlighting(language: currentLanguage)
-        }
-    }
-    
-    func setup(language: String, theme: String) {
+    func setup(language: String) {
         self.currentLanguage = language
         
         // Highlightr 초기화
         highlightr = Highlightr()
-        highlightr?.setTheme(to: theme)
+        highlightr?.setTheme(to: "atom-one-dark")
         
-        // TextView 설정
+        // TextView 기본 설정
         isEditable = true
         isSelectable = true
         allowsUndo = true
-        isRichText = false
-        font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        backgroundColor = NSColor(red: 0.12, green: 0.12, blue: 0.14, alpha: 1.0)
-        insertionPointColor = .white
-        textColor = .white
+        isRichText = true  // attributed string 지원
+        usesFontPanel = false
+        usesRuler = false
         
-        // 여백 설정
-        textContainerInset = NSSize(width: 8, height: 8)
+        // 배경 & 색상
+        drawsBackground = true
+        backgroundColor = NSColor(red: 0.11, green: 0.11, blue: 0.12, alpha: 1.0)
+        insertionPointColor = .white
+        
+        // 폰트
+        font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        
+        // 여백
+        textContainerInset = NSSize(width: 12, height: 12)
+        textContainer?.lineFragmentPadding = 0
+        
+        // 자동 크기 조절
+        isVerticallyResizable = true
+        isHorizontallyResizable = false
+        autoresizingMask = [.width]
+        textContainer?.widthTracksTextView = true
     }
     
-    func applyHighlighting(language: String) {
+    func setText(_ text: String, language: String) {
         currentLanguage = language
-        guard let highlightr = highlightr,
-              let attributed = highlightr.highlight(string, as: mapLanguage(language)) else {
-            return
+        
+        // Highlighting 시도
+        if let highlightr = highlightr,
+           let highlighted = highlightr.highlight(text, as: mapLanguage(language)) {
+            
+            // 폰트 적용 (Highlightr 기본 폰트 대체)
+            let mutableAttr = NSMutableAttributedString(attributedString: highlighted)
+            let fullRange = NSRange(location: 0, length: mutableAttr.length)
+            mutableAttr.addAttribute(.font, 
+                                     value: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular), 
+                                     range: fullRange)
+            
+            textStorage?.setAttributedString(mutableAttr)
+        } else {
+            // Fallback: plain text
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
+                .foregroundColor: NSColor.white
+            ]
+            let plainAttr = NSAttributedString(string: text, attributes: attrs)
+            textStorage?.setAttributedString(plainAttr)
         }
-        
-        // 커서 위치 저장
-        let selectedRanges = self.selectedRanges
-        
-        // Highlighting 적용
-        textStorage?.setAttributedString(attributed)
-        
-        // 폰트 재적용 (Highlightr가 폰트를 바꿀 수 있음)
-        textStorage?.addAttribute(.font, 
-                                   value: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
-                                   range: NSRange(location: 0, length: textStorage?.length ?? 0))
-        
-        // 커서 위치 복원
-        self.selectedRanges = selectedRanges
     }
     
     override func didChangeText() {
         super.didChangeText()
         onTextChange?(string)
-        
-        // 타이핑 중 실시간 highlighting (debounce 필요할 수 있음)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.applyHighlighting(language: self?.currentLanguage ?? "plaintext")
-        }
     }
     
     private func mapLanguage(_ lang: String) -> String {
-        // Zero 언어명 -> Highlightr 언어명 매핑
         switch lang {
         case "swift": return "swift"
         case "java": return "java"
@@ -152,7 +153,7 @@ class HighlightedTextView: NSTextView {
         case "dockerfile": return "dockerfile"
         case "kotlin": return "kotlin"
         case "gradle": return "gradle"
-        default: return "plaintext"
+        default: return lang  // 그대로 전달
         }
     }
 }
