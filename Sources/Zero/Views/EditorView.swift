@@ -118,13 +118,7 @@ struct EditorView: View {
                     .padding(.vertical, 8)
                     .background(Color(nsColor: .controlBackgroundColor))
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.black.opacity(0.1), lineWidth: 0.5)
-                )
-                .shadow(color: .black.opacity(0.06), radius: 6, x: 0, y: 2)
-                .padding(12)
+                .background(Color.white)
             }
         }
         .navigationTitle("Zero")
