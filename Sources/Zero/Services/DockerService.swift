@@ -2,7 +2,7 @@ import Foundation
 
 struct DockerService {
     let runner: CommandRunning
-    let dockerPath = "/usr/local/bin/docker" // 추후 환경변수 등에서 탐색 가능
+    let dockerPath = Constants.Docker.path
     
     init(runner: CommandRunning = CommandRunner()) {
         self.runner = runner
