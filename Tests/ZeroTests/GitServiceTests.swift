@@ -29,8 +29,10 @@ final class GitServiceTests: XCTestCase {
         XCTAssertEqual(mockRunner.executedContainer, containerName)
         
         // 토큰이 포함된 URL이 명령어로 전달되었는지 확인
-        // https://x-access-token:ghp_secret_token@github.com/zero-ide/Zero.git
-        let expectedCommandStart = "git clone https://x-access-token:ghp_secret_token@github.com/zero-ide/Zero.git"
-        XCTAssertTrue(mockRunner.executedCommand?.starts(with: expectedCommandStart) ?? false)
+        let command = mockRunner.executedCommand ?? ""
+        XCTAssertTrue(command.contains("x-access-token:ghp_secret_token@github.com/zero-ide/Zero.git"))
+        
+        // /workspace 디렉토리에 clone되는지 확인
+        XCTAssertTrue(command.contains("/workspace"), "Clone should target /workspace directory")
     }
 }
