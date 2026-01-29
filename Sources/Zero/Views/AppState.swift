@@ -24,10 +24,9 @@ class AppState: ObservableObject {
     private let keychainService = Constants.Keychain.service
     private let keychainAccount = Constants.Keychain.account
     private let sessionManager = SessionManager()
-    private lazy var orchestrator: ContainerOrchestrator = {
-        let docker = DockerService()
-        return ContainerOrchestrator(dockerService: docker, sessionManager: sessionManager)
-    }()
+    
+    let executionService: ExecutionService
+    private let orchestrator: ContainerOrchestrator
     
     // 테스트를 위한 Factory
     var gitHubServiceFactory: (String) -> GitHubService = { token in
@@ -35,6 +34,10 @@ class AppState: ObservableObject {
     }
     
     init() {
+        let docker = DockerService()
+        self.executionService = ExecutionService(dockerService: docker)
+        self.orchestrator = ContainerOrchestrator(dockerService: docker, sessionManager: sessionManager)
+        
         checkLoginStatus()
     }
     
