@@ -28,24 +28,6 @@ struct FileExplorerView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header (글래스모피즘)
-            HStack {
-                Text("Files")
-                    .font(.system(size: 13, weight: .semibold))
-                Spacer()
-                Button(action: refreshFiles) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(.ultraThinMaterial)
-            
-            Divider()
-            
             // File Tree
             if isLoading {
                 VStack(spacing: 12) {
