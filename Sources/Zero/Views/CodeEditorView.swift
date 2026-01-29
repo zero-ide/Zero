@@ -12,7 +12,7 @@ struct CodeEditorView: NSViewRepresentable {
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
         scrollView.drawsBackground = true
-        scrollView.backgroundColor = NSColor(red: 0.11, green: 0.11, blue: 0.12, alpha: 1.0)
+        scrollView.backgroundColor = .white
         
         let textView = HighlightedTextView(frame: .zero)
         textView.setup(language: language)
@@ -67,9 +67,9 @@ class HighlightedTextView: NSTextView {
     func setup(language: String) {
         self.currentLanguage = language
         
-        // Highlightr 초기화
+        // Highlightr 초기화 (라이트 테마)
         highlightr = Highlightr()
-        highlightr?.setTheme(to: "atom-one-dark")
+        highlightr?.setTheme(to: "xcode")
         
         // TextView 기본 설정
         isEditable = true
@@ -79,10 +79,10 @@ class HighlightedTextView: NSTextView {
         usesFontPanel = false
         usesRuler = false
         
-        // 배경 & 색상
+        // 배경 & 색상 (화이트)
         drawsBackground = true
-        backgroundColor = NSColor(red: 0.11, green: 0.11, blue: 0.12, alpha: 1.0)
-        insertionPointColor = .white
+        backgroundColor = .white
+        insertionPointColor = .black
         
         // 폰트
         font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
@@ -117,7 +117,7 @@ class HighlightedTextView: NSTextView {
             // Fallback: plain text
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
-                .foregroundColor: NSColor.white
+                .foregroundColor: NSColor.black
             ]
             let plainAttr = NSAttributedString(string: text, attributes: attrs)
             textStorage?.setAttributedString(plainAttr)
