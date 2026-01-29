@@ -1,30 +1,13 @@
-## Description
-<!-- 이번 PR의 핵심 변경 사항을 요약해주세요. -->
+## Context
+- **Issue**: #
+- **Type**: [ ] `feat` [ ] `fix` [ ] `refactor` [ ] `docs` [ ] `etc`
 
-## Type of Change
-<!-- Conventional Commits 가이드에 따라 해당되는 항목에 체크(x) 해주세요. -->
-- [ ] `feat`: 새로운 기능 추가
-- [ ] `fix`: 버그 수정
-- [ ] `docs`: 문서 수정
-- [ ] `style`: 코드 포맷팅, 세미콜론 누락 등 (코드 변경 없음)
-- [ ] `refactor`: 코드 리팩토링
-- [ ] `test`: 테스트 코드 추가 및 리팩토링
-- [ ] `chore`: 빌드 업무 수정, 패키지 매니저 수정
-
-## Related Issue
-<!-- 연결된 이슈 번호를 입력해주세요. Ex. #1 -->
-- Issue: #
+## Summary
+<!-- 이번 PR의 핵심 요약 -->
 
 ## Key Changes
-<!-- 구체적인 수정 사항을 리스트로 작성해주세요. -->
 - 
 - 
 
 ## Screenshots (Optional)
-<!-- UI 변경이 있을 경우 스크린샷을 첨부해주세요. -->
-
-## Checklist
-<!-- 코드 리뷰 전 작성자가 확인해야 할 항목들입니다. -->
-- [ ] 커밋 메시지 컨벤션을 준수했습니다. (Ex. feat: description)
-- [ ] 변경 사항에 대한 테스트를 진행했습니다.
-- [ ] 불필요한 공백이나 주석을 제거했습니다.
+<!-- UI 변경이 있을 경우 스크린샷 첨부 -->
