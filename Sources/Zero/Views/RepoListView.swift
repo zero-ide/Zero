@@ -43,6 +43,7 @@ struct RepoListView: View {
                         .padding(.horizontal)
                 }
             }
+            .navigationSplitViewColumnWidth(min: 350, ideal: 500, max: 700)
             .searchable(text: $searchText, prompt: "Search repositories...")
             .navigationTitle("Zero")
             .toolbar {
