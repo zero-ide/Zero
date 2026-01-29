@@ -2,10 +2,18 @@ import Foundation
 
 struct DockerService {
     let runner: CommandRunning
-    let dockerPath = Constants.Docker.path
+    let dockerPath: String
     
     init(runner: CommandRunning = CommandRunner()) {
         self.runner = runner
+        // Docker 경로 탐색 (Apple Silicon vs Intel)
+        let possiblePaths = [
+            "/usr/local/bin/docker",
+            "/opt/homebrew/bin/docker",
+            "/usr/bin/docker"
+        ]
+        self.dockerPath = possiblePaths.first(where: { FileManager.default.fileExists(atPath: $0) }) 
+            ?? "/usr/local/bin/docker"
     }
     
     func checkInstallation() throws -> Bool {

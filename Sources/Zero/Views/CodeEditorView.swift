@@ -86,7 +86,9 @@ class HighlightedTextView: NSTextView {
         self.currentLanguage = language
         
         highlightr = Highlightr()
-        highlightr?.setTheme(to: "xcode")
+        if highlightr?.setTheme(to: "xcode") == false {
+            print("Failed to load theme: xcode")
+        }
         
         isEditable = true
         isSelectable = true
