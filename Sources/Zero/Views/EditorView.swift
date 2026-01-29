@@ -10,6 +10,8 @@ struct EditorView: View {
     @State private var isSaving = false
     @State private var hasUnsavedChanges = false
     @State private var statusMessage: String = ""
+    @State private var cursorLine: Int = 1
+    @State private var cursorColumn: Int = 1
     
     private var fileService: FileService {
         FileService(containerName: session.containerName)
@@ -17,21 +19,21 @@ struct EditorView: View {
     
     var body: some View {
         NavigationSplitView {
-            // Sidebar: File Explorer (글래스모피즘)
+            // Sidebar: File Explorer
             FileExplorerView(
                 selectedFile: $selectedFile,
                 containerName: session.containerName,
                 onFileSelect: loadFile
             )
-            .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 350)
+            .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 400)
         } detail: {
-            // Main: Editor Area (글래스모피즘)
+            // Main: Editor Area
             ZStack {
                 // 배경 그라데이션
                 LinearGradient(
                     colors: [
-                        Color(red: 0.95, green: 0.95, blue: 0.97),
-                        Color(red: 0.90, green: 0.92, blue: 0.96)
+                        Color(red: 0.96, green: 0.96, blue: 0.98),
+                        Color(red: 0.92, green: 0.93, blue: 0.97)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -39,71 +41,123 @@ struct EditorView: View {
                 .ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Tab bar (글래스)
-                    HStack {
-                        if let file = selectedFile {
-                            Image(systemName: iconForFile(file.name))
-                                .font(.system(size: 14))
+                    // Tab bar (Breadcrumb 스타일)
+                    HStack(spacing: 8) {
+                        // Breadcrumb
+                        HStack(spacing: 4) {
+                            Image(systemName: "folder.fill")
+                                .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
-                            Text(file.name)
-                                .font(.system(size: 13, weight: .medium))
                             
-                            if hasUnsavedChanges {
-                                Circle()
-                                    .fill(.orange)
-                                    .frame(width: 8, height: 8)
-                            }
-                        } else {
-                            Image(systemName: "doc.text")
-                                .foregroundStyle(.tertiary)
-                            Text("No file selected")
+                            Text(session.repoURL.lastPathComponent.replacingOccurrences(of: ".git", with: ""))
+                                .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
+                            
+                            if let file = selectedFile {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.tertiary)
+                                
+                                Image(systemName: iconForFile(file.name))
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(colorForFile(file.name))
+                                
+                                Text(file.name)
+                                    .font(.system(size: 13, weight: .medium))
+                                
+                                if hasUnsavedChanges {
+                                    Circle()
+                                        .fill(.orange)
+                                        .frame(width: 8, height: 8)
+                                }
+                            }
                         }
                         
                         Spacer()
                         
-                        if isLoadingFile {
-                            ProgressView()
-                                .scaleEffect(0.6)
-                        }
-                        
-                        if !statusMessage.isEmpty {
-                            Text(statusMessage)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(.ultraThinMaterial, in: Capsule())
+                        // Status indicators
+                        HStack(spacing: 12) {
+                            if isLoadingFile {
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                            }
+                            
+                            if !statusMessage.isEmpty {
+                                Text(statusMessage)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(.ultraThinMaterial, in: Capsule())
+                            }
                         }
                     }
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 10)
                     .background(.ultraThinMaterial)
                     
-                    // Editor (글래스 카드)
+                    // Editor
                     CodeEditorView(
                         content: $fileContent,
                         language: currentLanguage,
-                        onReady: {
-                            isEditorReady = true
+                        onReady: { isEditorReady = true },
+                        onCursorChange: { line, column in
+                            cursorLine = line
+                            cursorColumn = column
                         }
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.white.opacity(0.5), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.white.opacity(0.8), lineWidth: 1)
                     )
-                    .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 4)
-                    .padding(16)
+                    .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 8)
                     .onChange(of: fileContent) { _, _ in
                         if !isLoadingFile {
                             hasUnsavedChanges = true
                         }
                     }
+                    
+                    // 하단 상태 표시줄
+                    HStack(spacing: 16) {
+                        // 언어 모드
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                .font(.system(size: 10))
+                            Text(languageDisplayName(currentLanguage))
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        
+                        Spacer()
+                        
+                        // 커서 위치
+                        HStack(spacing: 4) {
+                            Text("Ln \(cursorLine), Col \(cursorColumn)")
+                                .font(.system(size: 11, design: .monospaced))
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        
+                        // 인코딩
+                        Text("UTF-8")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
                 }
             }
         }
-        .navigationTitle("Zero - \(session.repoURL.lastPathComponent.replacingOccurrences(of: ".git", with: ""))")
+        .navigationTitle("Zero")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: saveFile) {
@@ -124,20 +178,62 @@ struct EditorView: View {
         }
     }
     
+    // MARK: - Helper Functions
+    
     private func iconForFile(_ filename: String) -> String {
         let ext = (filename as NSString).pathExtension.lowercased()
         switch ext {
         case "swift": return "swift"
         case "java", "kt", "kts": return "cup.and.saucer.fill"
-        case "js", "ts": return "j.square.fill"
+        case "js": return "j.square.fill"
+        case "ts": return "t.square.fill"
         case "py": return "p.square.fill"
         case "json": return "curlybraces"
-        case "md": return "doc.richtext"
+        case "md": return "doc.richtext.fill"
         case "html", "css": return "globe"
-        case "yml", "yaml": return "list.bullet.rectangle"
-        case "sh": return "terminal"
-        case "dockerfile": return "shippingbox"
-        default: return "doc.text"
+        case "yml", "yaml": return "list.bullet.rectangle.fill"
+        case "sh": return "terminal.fill"
+        case "dockerfile": return "shippingbox.fill"
+        default: return "doc.text.fill"
+        }
+    }
+    
+    private func colorForFile(_ filename: String) -> Color {
+        let ext = (filename as NSString).pathExtension.lowercased()
+        switch ext {
+        case "swift": return .orange
+        case "java": return .red
+        case "kt", "kts": return .purple
+        case "js": return .yellow
+        case "ts": return .blue
+        case "py": return .cyan
+        case "json": return .yellow
+        case "md": return .blue
+        case "html": return .orange
+        case "css": return .pink
+        case "yml", "yaml": return .pink
+        case "sh": return .green
+        default: return .secondary
+        }
+    }
+    
+    private func languageDisplayName(_ lang: String) -> String {
+        switch lang {
+        case "swift": return "Swift"
+        case "java": return "Java"
+        case "kotlin": return "Kotlin"
+        case "javascript": return "JavaScript"
+        case "typescript": return "TypeScript"
+        case "python": return "Python"
+        case "json": return "JSON"
+        case "html": return "HTML"
+        case "css": return "CSS"
+        case "markdown": return "Markdown"
+        case "yaml": return "YAML"
+        case "shell": return "Shell"
+        case "dockerfile": return "Dockerfile"
+        case "plaintext": return "Plain Text"
+        default: return lang.capitalized
         }
     }
     

@@ -7,6 +7,10 @@ struct FileItem: Identifiable {
     let isDirectory: Bool
     var children: [FileItem]?
     var isExpanded: Bool = false
+    
+    var isHidden: Bool {
+        name.hasPrefix(".")
+    }
 }
 
 struct FileExplorerView: View {
@@ -24,25 +28,27 @@ struct FileExplorerView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
+            // Header (글래스모피즘)
             HStack {
                 Text("Files")
-                    .font(.headline)
+                    .font(.system(size: 13, weight: .semibold))
                 Spacer()
                 Button(action: refreshFiles) {
                     Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 12))
                 }
                 .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color(nsColor: .controlBackgroundColor))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(.ultraThinMaterial)
             
             Divider()
             
             // File Tree
             if isLoading {
-                VStack {
+                VStack(spacing: 12) {
                     ProgressView()
                     Text("Loading files...")
                         .font(.caption)
@@ -50,27 +56,31 @@ struct FileExplorerView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error = errorMessage {
-                VStack {
-                    Image(systemName: "exclamationmark.triangle")
+                VStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.largeTitle)
                         .foregroundStyle(.yellow)
                     Text(error)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
-                    Button("Retry") {
-                        refreshFiles()
-                    }
-                    .buttonStyle(.bordered)
+                    Button("Retry") { refreshFiles() }
+                        .buttonStyle(.bordered)
                 }
                 .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if files.isEmpty {
-                Text("No files")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 8) {
+                    Image(systemName: "folder")
+                        .font(.largeTitle)
+                        .foregroundStyle(.tertiary)
+                    Text("No files")
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
+                    LazyVStack(alignment: .leading, spacing: 1) {
                         ForEach(files) { file in
                             FileRowView(
                                 file: file,
@@ -81,21 +91,20 @@ struct FileExplorerView: View {
                             )
                         }
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 8)
                 }
             }
         }
         .frame(minWidth: 200)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
         .task {
             await loadFiles()
         }
     }
     
     private func refreshFiles() {
-        Task {
-            await loadFiles()
-        }
+        Task { await loadFiles() }
     }
     
     private func loadFiles() async {
@@ -107,7 +116,6 @@ struct FileExplorerView: View {
             files = try await fileService.listDirectory()
         } catch {
             errorMessage = "Failed to load files: \(error.localizedDescription)"
-            // Fallback to mock data for development
             files = [
                 FileItem(name: "README.md", path: "/workspace/README.md", isDirectory: false),
                 FileItem(name: "src", path: "/workspace/src", isDirectory: true, children: [])
@@ -135,50 +143,63 @@ struct FileRowView: View {
     @State private var isExpanded = false
     @State private var children: [FileItem] = []
     @State private var isLoadingChildren = false
+    @State private var isHovered = false
+    
+    private var isSelected: Bool {
+        selectedFile?.id == file.id
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 // Indentation
-                ForEach(0..<level, id: \.self) { _ in
-                    Spacer().frame(width: 16)
+                if level > 0 {
+                    Spacer().frame(width: CGFloat(level) * 16)
                 }
                 
-                // Expand/Collapse button for directories
+                // Expand/Collapse button
                 if file.isDirectory {
                     Button(action: { toggleExpand() }) {
                         if isLoadingChildren {
                             ProgressView()
-                                .scaleEffect(0.5)
-                                .frame(width: 16, height: 16)
+                                .scaleEffect(0.4)
+                                .frame(width: 14, height: 14)
                         } else {
                             Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.tertiary)
+                                .frame(width: 14, height: 14)
                         }
                     }
                     .buttonStyle(.plain)
-                    .frame(width: 16)
                 } else {
-                    Spacer().frame(width: 16)
+                    Spacer().frame(width: 14)
                 }
                 
-                // Icon
-                Image(systemName: file.isDirectory ? "folder.fill" : fileIcon(for: file.name))
-                    .foregroundStyle(file.isDirectory ? .yellow : .secondary)
-                    .font(.system(size: 14))
+                // Icon (컬러)
+                fileIconView
+                    .frame(width: 16, height: 16)
                 
                 // Name
                 Text(file.name)
                     .font(.system(size: 13))
                     .lineLimit(1)
+                    .foregroundStyle(file.isHidden ? .tertiary : .primary)
                 
                 Spacer()
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(selectedFile?.id == file.id ? Color.accentColor.opacity(0.2) : Color.clear)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isSelected ? Color.accentColor.opacity(0.2) : (isHovered ? Color.primary.opacity(0.05) : Color.clear))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isSelected ? Color.accentColor.opacity(0.3) : Color.clear, lineWidth: 1)
+            )
             .contentShape(Rectangle())
+            .onHover { isHovered = $0 }
             .onTapGesture {
                 if file.isDirectory {
                     toggleExpand()
@@ -201,6 +222,61 @@ struct FileRowView: View {
                 }
             }
         }
+        .opacity(file.isHidden ? 0.6 : 1.0)
+    }
+    
+    @ViewBuilder
+    private var fileIconView: some View {
+        let (iconName, iconColor) = fileIconInfo(for: file)
+        
+        if file.isDirectory {
+            Image(systemName: isExpanded ? "folder.fill" : "folder.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(Color.yellow)
+        } else {
+            Image(systemName: iconName)
+                .font(.system(size: 13))
+                .foregroundStyle(iconColor)
+        }
+    }
+    
+    private func fileIconInfo(for file: FileItem) -> (String, Color) {
+        let ext = (file.name as NSString).pathExtension.lowercased()
+        let name = file.name.lowercased()
+        
+        // Special files
+        if name == "dockerfile" { return ("shippingbox.fill", .blue) }
+        if name == "readme.md" { return ("book.fill", .blue) }
+        if name == ".gitignore" { return ("eye.slash", .orange) }
+        if name.contains("license") { return ("doc.text.fill", .green) }
+        
+        switch ext {
+        case "swift": return ("swift", .orange)
+        case "java": return ("cup.and.saucer.fill", .red)
+        case "kt", "kts": return ("k.square.fill", .purple)
+        case "js": return ("j.square.fill", .yellow)
+        case "ts": return ("t.square.fill", .blue)
+        case "py": return ("p.square.fill", .cyan)
+        case "rb": return ("r.square.fill", .red)
+        case "go": return ("g.square.fill", .cyan)
+        case "rs": return ("r.square.fill", .orange)
+        case "json": return ("curlybraces", .yellow)
+        case "xml", "plist": return ("chevron.left.forwardslash.chevron.right", .orange)
+        case "html": return ("globe", .orange)
+        case "css", "scss", "sass": return ("paintbrush.fill", .pink)
+        case "md", "markdown": return ("doc.richtext.fill", .blue)
+        case "yml", "yaml": return ("list.bullet.rectangle.fill", .pink)
+        case "sh", "bash", "zsh": return ("terminal.fill", .green)
+        case "sql": return ("cylinder.fill", .blue)
+        case "png", "jpg", "jpeg", "gif", "svg", "ico": return ("photo.fill", .purple)
+        case "pdf": return ("doc.fill", .red)
+        case "zip", "tar", "gz", "rar": return ("doc.zipper", .gray)
+        case "gradle": return ("g.square.fill", .green)
+        case "properties": return ("gearshape.fill", .gray)
+        case "env": return ("key.fill", .yellow)
+        case "lock": return ("lock.fill", .gray)
+        default: return ("doc.fill", .secondary)
+        }
     }
     
     private func toggleExpand() {
@@ -213,21 +289,6 @@ struct FileRowView: View {
                 isExpanded = true
                 isLoadingChildren = false
             }
-        }
-    }
-    
-    private func fileIcon(for filename: String) -> String {
-        let ext = (filename as NSString).pathExtension.lowercased()
-        switch ext {
-        case "swift": return "swift"
-        case "js", "ts": return "curlybraces"
-        case "json": return "doc.text"
-        case "md": return "doc.richtext"
-        case "html", "css": return "globe"
-        case "py": return "chevron.left.forwardslash.chevron.right"
-        case "java": return "cup.and.saucer"
-        case "sh": return "terminal"
-        default: return "doc"
         }
     }
 }
