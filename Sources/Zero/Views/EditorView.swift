@@ -61,8 +61,8 @@ struct EditorView: View {
                     Divider()
                 }
                 
-                // Editor
-                MonacoWebView(
+                // Editor (Native)
+                CodeEditorView(
                     content: $fileContent,
                     language: currentLanguage,
                     onReady: {

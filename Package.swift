@@ -9,11 +9,15 @@ let package = Package(
     products: [
         .executable(name: "Zero", targets: ["Zero"]),
     ],
-    dependencies: [],
+    dependencies: [
+        .package(url: "https://github.com/CodeEditApp/CodeEditTextView.git", from: "0.7.0")
+    ],
     targets: [
         .executableTarget(
             name: "Zero",
-            dependencies: [],
+            dependencies: [
+                .product(name: "CodeEditTextView", package: "CodeEditTextView")
+            ],
             path: "Sources/Zero",
             resources: [
                 .process("Resources")
