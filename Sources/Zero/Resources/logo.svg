@@ -1,0 +1,20 @@
+<svg width="420" height="420" viewBox="0 0 420 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="420" height="420" fill="#F0F0F0"/>
+<rect width="71" height="70" transform="translate(35 35)" fill="white"/>
+<rect width="71" height="70" transform="translate(314 35)" fill="white"/>
+<rect width="71" height="70" transform="translate(35 105)" fill="white"/>
+<rect width="71" height="70" transform="translate(314 105)" fill="white"/>
+<rect width="71" height="70" transform="translate(314 175)" fill="white"/>
+<rect width="71" height="70" transform="translate(314 245)" fill="white"/>
+<rect width="71" height="70" transform="translate(35 175)" fill="white"/>
+<rect width="71" height="70" transform="translate(35 245)" fill="white"/>
+<rect width="71" height="70" transform="translate(314 315)" fill="white"/>
+<rect width="71" height="70" transform="translate(35 315)" fill="white"/>
+<rect width="71" height="70" transform="translate(106 315)" fill="white"/>
+<rect width="71" height="70" transform="translate(177 315)" fill="white"/>
+<rect width="71" height="70" transform="translate(243 315)" fill="white"/>
+<rect width="71" height="70" transform="translate(106 35)" fill="white"/>
+<rect width="71" height="70" transform="translate(177 35)" fill="white"/>
+<rect width="71" height="70" transform="translate(177 175)" fill="white"/>
+<rect width="71" height="70" transform="translate(243 35)" fill="white"/>
+</svg>
