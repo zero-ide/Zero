@@ -12,7 +12,7 @@ extension DockerService: DockerRunning {}
 class ContainerOrchestrator {
     private let dockerService: DockerRunning
     private let sessionManager: SessionManager
-    private let baseImage = "ubuntu:22.04"
+    private let baseImage = "alpine:latest"
     
     init(dockerService: DockerRunning, sessionManager: SessionManager) {
         self.dockerService = dockerService
@@ -27,8 +27,8 @@ class ContainerOrchestrator {
         // 2. 컨테이너 실행
         _ = try dockerService.runContainer(image: baseImage, name: containerName)
         
-        // 2-1. Git 설치 (Ubuntu 이미지에 git이 없으므로 설치 필요)
-        _ = try dockerService.executeShell(container: containerName, script: "apt-get update && apt-get install -y git")
+        // 2-1. Git 설치 (Alpine 이미지에 git이 없으므로 설치 필요)
+        _ = try dockerService.executeShell(container: containerName, script: "apk add --no-cache git")
         
         // 3. Git Clone (토큰 주입)
         let gitService = GitService(runner: dockerService as! ContainerRunning)
