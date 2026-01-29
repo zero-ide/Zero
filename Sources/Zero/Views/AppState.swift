@@ -39,13 +39,12 @@ class AppState: ObservableObject {
     }
     
     func checkLoginStatus() {
-        do {
-            if let data = try KeychainHelper.standard.read(service: keychainService, account: keychainAccount),
-               let token = String(data: data, encoding: .utf8) {
-                self.accessToken = token
-                self.isLoggedIn = true
-            }
-        } catch {
+        // Keychain 접근 실패 시 크래시 방지
+        if let data = try? KeychainHelper.standard.read(service: keychainService, account: keychainAccount),
+           let token = String(data: data, encoding: .utf8) {
+            self.accessToken = token
+            self.isLoggedIn = true
+        } else {
             self.isLoggedIn = false
         }
     }
