@@ -30,6 +30,12 @@ struct DockerService {
         return try runner.execute(command: dockerPath, arguments: args)
     }
     
+    /// 쉘 스크립트 실행 (sh -c 사용)
+    func executeShell(container: String, script: String) throws -> String {
+        let args = ["exec", container, "sh", "-c", script]
+        return try runner.execute(command: dockerPath, arguments: args)
+    }
+    
     /// 디렉토리 파일 목록 조회
     func listFiles(container: String, path: String) throws -> String {
         // ls -la 형식으로 출력

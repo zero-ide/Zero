@@ -68,4 +68,23 @@ final class DockerServiceTests: XCTestCase {
         // "git --version"이 하나의 인자로 전달되는지, 분리되는지는 구현에 따라 다름 (여기선 sh -c 로 감싸거나 직접 전달)
         // 일단 단순 전달 가정
     }
+
+    func testExecuteShell() throws {
+        // Given
+        let mockRunner = MockCommandRunner()
+        mockRunner.mockOutput = "success"
+        let service = DockerService(runner: mockRunner)
+        
+        // When
+        let script = "mkdir -p /workspace && cd /workspace"
+        _ = try service.executeShell(container: "zero-dev", script: script)
+        
+        // Then
+        // ["exec", "zero-dev", "sh", "-c", "mkdir -p /workspace && cd /workspace"]
+        XCTAssertEqual(mockRunner.executedArguments?[0], "exec")
+        XCTAssertEqual(mockRunner.executedArguments?[1], "zero-dev")
+        XCTAssertEqual(mockRunner.executedArguments?[2], "sh")
+        XCTAssertEqual(mockRunner.executedArguments?[3], "-c")
+        XCTAssertEqual(mockRunner.executedArguments?[4], script)
+    }
 }

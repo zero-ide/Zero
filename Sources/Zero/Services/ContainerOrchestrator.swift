@@ -4,6 +4,7 @@ import Foundation
 protocol DockerRunning {
     func runContainer(image: String, name: String) throws -> String
     func executeCommand(container: String, command: String) throws -> String
+    func executeShell(container: String, script: String) throws -> String
 }
 
 extension DockerService: DockerRunning {}
@@ -25,6 +26,9 @@ class ContainerOrchestrator {
         
         // 2. 컨테이너 실행
         _ = try dockerService.runContainer(image: baseImage, name: containerName)
+        
+        // 2-1. Git 설치 (Ubuntu 이미지에 git이 없으므로 설치 필요)
+        _ = try dockerService.executeShell(container: containerName, script: "apt-get update && apt-get install -y git")
         
         // 3. Git Clone (토큰 주입)
         let gitService = GitService(runner: dockerService as! ContainerRunning)
