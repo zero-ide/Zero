@@ -176,14 +176,14 @@ struct EditorView: View {
             
             do {
                 // 1. 프로젝트 타입 감지
-                let command = try await appState.executionService.detectRunCommand(container: session.containerName)
+                let (setup, command) = try await appState.executionService.detectRunCommand(container: session.containerName)
                 
                 await MainActor.run {
                     appState.executionService.output += "\n✅ Detected: \(command)\n🚀 Running...\n"
                 }
                 
                 // 2. 실행
-                await appState.executionService.run(container: session.containerName, command: command)
+                await appState.executionService.run(container: session.containerName, command: command, setup: setup)
             } catch {
                 await MainActor.run {
                     appState.executionService.status = .failed(error.localizedDescription)

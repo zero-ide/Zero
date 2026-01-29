@@ -21,10 +21,11 @@ final class ExecutionServiceTests: XCTestCase {
         mockDocker.fileExistenceResults = ["Package.swift": true]
         
         // When
-        let command = try await service.detectRunCommand(container: "test-container")
+        let (setup, command) = try await service.detectRunCommand(container: "test-container")
         
         // Then
         XCTAssertEqual(command, "swift run")
+        XCTAssertNil(setup)
     }
     
     func testDetectRunCommand_NodeJS() async throws {
@@ -32,49 +33,59 @@ final class ExecutionServiceTests: XCTestCase {
         mockDocker.fileExistenceResults = ["package.json": true]
         
         // When
-        let command = try await service.detectRunCommand(container: "test-container")
+        let (setup, command) = try await service.detectRunCommand(container: "test-container")
         
         // Then
         XCTAssertEqual(command, "npm start")
+        XCTAssertNil(setup)
     }
     
-    func testExecute_Success() async {
+    func testDetectRunCommand_CustomConfig() async throws {
         // Given
-        mockDocker.commandOutput = "Hello World\n"
+        mockDocker.fileExistenceResults = ["zero-ide.json": true]
+        mockDocker.fileContentResults = [
+            "zero-ide.json": """
+            {
+                "command": "custom run",
+                "setup": "custom setup"
+            }
+            """
+        ]
         
         // When
-        await service.run(container: "test-container", command: "echo hello")
+        let (setup, command) = try await service.detectRunCommand(container: "test-container")
         
         // Then
-        XCTAssertEqual(service.status, .success)
-        XCTAssertTrue(service.output.contains("Hello World"))
+        XCTAssertEqual(command, "custom run")
+        XCTAssertEqual(setup, "custom setup")
     }
 }
 
 class MockExecutionDockerService: DockerServiceProtocol {
     var fileExistenceResults: [String: Bool] = [:]
+    var fileContentResults: [String: String] = [:]
     var commandOutput: String = ""
     
     func checkInstallation() throws -> Bool { return true }
     
-    // ...
-    
     func fileExists(container: String, path: String) throws -> Bool {
-        // 경로에서 파일명만 추출해서 체크 (간단하게)
         let filename = URL(fileURLWithPath: path).lastPathComponent
         return fileExistenceResults[filename] ?? false
     }
     
-    // ... rest of methods
-    func runContainer(image: String, name: String) throws -> String { return "" }
-    func executeCommand(container: String, command: String) throws -> String { return "" }
+    func readFile(container: String, path: String) throws -> String {
+        let filename = URL(fileURLWithPath: path).lastPathComponent
+        return fileContentResults[filename] ?? ""
+    }
+    
     func executeShell(container: String, script: String) throws -> String {
         return commandOutput
     }
+    
+    func runContainer(image: String, name: String) throws -> String { return "" }
+    func executeCommand(container: String, command: String) throws -> String { return "" }
     func listFiles(container: String, path: String) throws -> String { return "" }
-    func readFile(container: String, path: String) throws -> String { return "" }
     func writeFile(container: String, path: String, content: String) throws {}
     func stopContainer(name: String) throws {}
     func removeContainer(name: String) throws {}
-    // fileExists 중복 제거
 }

@@ -17,13 +17,19 @@ class ExecutionService: ObservableObject {
         self.dockerService = dockerService
     }
     
-    func run(container: String, command: String) async {
+    func run(container: String, command: String, setup: String? = nil) async {
         await MainActor.run {
             self.status = .running
             // output 초기화하지 않음
         }
         
         do {
+            // 0. User Setup (zero-ide.json)
+            if let setupCmd = setup {
+                await MainActor.run { self.output += "\n📦 Running setup: \(setupCmd)..." }
+                _ = try dockerService.executeShell(container: container, script: "cd /workspace && \(setupCmd)")
+            }
+            
             // 1. 환경 설정 (런타임 설치)
             try await setupEnvironment(for: command, container: container)
             
@@ -59,31 +65,44 @@ class ExecutionService: ObservableObject {
         }
     }
     
-    func detectRunCommand(container: String) async throws -> String {
-        // 순서대로 체크 (우선순위)
+    func detectRunCommand(container: String) async throws -> (setup: String?, command: String) {
+        // Priority 1: zero-ide.json
+        if let exists = try? dockerService.fileExists(container: container, path: "zero-ide.json"), exists {
+            let jsonString = try dockerService.readFile(container: container, path: "zero-ide.json")
+            if let data = jsonString.data(using: .utf8) {
+                do {
+                    let config = try JSONDecoder().decode(ZeroConfig.self, from: data)
+                    return (config.setup, config.command)
+                } catch {
+                    throw error
+                }
+            }
+        }
+        
+        // Priority 3: Auto-Detect
         // 1. Swift
         if try dockerService.fileExists(container: container, path: "Package.swift") {
-            return "swift run"
+            return (nil, "swift run")
         }
         
         // 2. Node.js
         if try dockerService.fileExists(container: container, path: "package.json") {
-            return "npm start"
+            return (nil, "npm start")
         }
         
         // 3. Python
         if try dockerService.fileExists(container: container, path: "main.py") {
-            return "python3 main.py"
+            return (nil, "python3 main.py")
         }
         
         // 4. Java
         if try dockerService.fileExists(container: container, path: "Main.java") {
-            return "javac Main.java && java Main"
+            return (nil, "javac Main.java && java Main")
         }
         
         // 5. Go
         if try dockerService.fileExists(container: container, path: "go.mod") {
-            return "go run ."
+            return (nil, "go run .")
         }
         
         throw NSError(domain: "ExecutionService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Cannot detect project type"])
