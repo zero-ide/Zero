@@ -33,6 +33,7 @@ struct CodeEditorView: NSViewRepresentable {
         
         DispatchQueue.main.async {
             textView.setText(content, language: language)
+            textView.window?.makeFirstResponder(textView)
             onReady?()
         }
         
@@ -68,6 +69,18 @@ class HighlightedTextView: NSTextView {
     private var currentLanguage: String = "plaintext"
     var onTextChange: ((String) -> Void)?
     var onCursorChange: ((Int, Int) -> Void)?
+    
+    override var acceptsFirstResponder: Bool { true }
+    
+    override func becomeFirstResponder() -> Bool {
+        let result = super.becomeFirstResponder()
+        return result
+    }
+    
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        super.mouseDown(with: event)
+    }
     
     func setup(language: String) {
         self.currentLanguage = language
