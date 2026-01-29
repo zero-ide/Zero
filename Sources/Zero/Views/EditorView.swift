@@ -17,7 +17,7 @@ struct EditorView: View {
     
     var body: some View {
         NavigationSplitView {
-            // Sidebar: File Explorer (플로팅 스타일)
+            // Sidebar: File Explorer (글래스모피즘)
             FileExplorerView(
                 selectedFile: $selectedFile,
                 containerName: session.containerName,
@@ -25,62 +25,83 @@ struct EditorView: View {
             )
             .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 350)
         } detail: {
-            // Main: Editor Area
-            VStack(spacing: 0) {
-                // Tab bar
-                HStack {
-                    if let file = selectedFile {
-                        Image(systemName: iconForFile(file.name))
-                            .foregroundStyle(.secondary)
-                        Text(file.name)
-                            .font(.system(size: 13, weight: .medium))
-                        
-                        if hasUnsavedChanges {
-                            Circle()
-                                .fill(.orange)
-                                .frame(width: 8, height: 8)
-                        }
-                    } else {
-                        Text("No file selected")
-                            .foregroundStyle(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    if isLoadingFile {
-                        ProgressView()
-                            .scaleEffect(0.6)
-                    }
-                    
-                    if !statusMessage.isEmpty {
-                        Text(statusMessage)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(.bar)
-                
-                Divider()
-                
-                // Editor (플로팅 카드 스타일)
-                CodeEditorView(
-                    content: $fileContent,
-                    language: currentLanguage,
-                    onReady: {
-                        isEditorReady = true
-                    }
+            // Main: Editor Area (글래스모피즘)
+            ZStack {
+                // 배경 그라데이션
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.95, green: 0.95, blue: 0.97),
+                        Color(red: 0.90, green: 0.92, blue: 0.96)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .padding(12)
-                .onChange(of: fileContent) { _, _ in
-                    if !isLoadingFile {
-                        hasUnsavedChanges = true
+                .ignoresSafeArea()
+                
+                VStack(spacing: 0) {
+                    // Tab bar (글래스)
+                    HStack {
+                        if let file = selectedFile {
+                            Image(systemName: iconForFile(file.name))
+                                .font(.system(size: 14))
+                                .foregroundStyle(.secondary)
+                            Text(file.name)
+                                .font(.system(size: 13, weight: .medium))
+                            
+                            if hasUnsavedChanges {
+                                Circle()
+                                    .fill(.orange)
+                                    .frame(width: 8, height: 8)
+                            }
+                        } else {
+                            Image(systemName: "doc.text")
+                                .foregroundStyle(.tertiary)
+                            Text("No file selected")
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        if isLoadingFile {
+                            ProgressView()
+                                .scaleEffect(0.6)
+                        }
+                        
+                        if !statusMessage.isEmpty {
+                            Text(statusMessage)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(.ultraThinMaterial, in: Capsule())
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(.ultraThinMaterial)
+                    
+                    // Editor (글래스 카드)
+                    CodeEditorView(
+                        content: $fileContent,
+                        language: currentLanguage,
+                        onReady: {
+                            isEditorReady = true
+                        }
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.white.opacity(0.5), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 4)
+                    .padding(16)
+                    .onChange(of: fileContent) { _, _ in
+                        if !isLoadingFile {
+                            hasUnsavedChanges = true
+                        }
                     }
                 }
             }
-            .background(Color(nsColor: .windowBackgroundColor))
         }
         .navigationTitle("Zero - \(session.repoURL.lastPathComponent.replacingOccurrences(of: ".git", with: ""))")
         .toolbar {
