@@ -1,6 +1,11 @@
 ## Context
 - **Issue**: #
-- **Type**: [ ] `feat` [ ] `fix` [ ] `refactor` [ ] `docs` [ ] `etc`
+- **Type**:
+  - [ ] `feat`
+  - [ ] `fix`
+  - [ ] `refactor`
+  - [ ] `docs`
+  - [ ] `etc`
 
 ## Summary
 <!-- 이번 PR의 핵심 요약 -->
