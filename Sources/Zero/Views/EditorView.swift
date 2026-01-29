@@ -168,14 +168,26 @@ struct EditorView: View {
     private func runCode() {
         withAnimation { showTerminal = true }
         Task {
+            // UI 즉시 업데이트
+            await MainActor.run {
+                appState.executionService.status = .running
+                appState.executionService.output = "🔍 Detecting project type..."
+            }
+            
             do {
+                // 1. 프로젝트 타입 감지
                 let command = try await appState.executionService.detectRunCommand(container: session.containerName)
+                
+                await MainActor.run {
+                    appState.executionService.output += "\n✅ Detected: \(command)\n🚀 Running...\n"
+                }
+                
+                // 2. 실행
                 await appState.executionService.run(container: session.containerName, command: command)
             } catch {
-                // 에러 처리 (detect 실패 등)
                 await MainActor.run {
                     appState.executionService.status = .failed(error.localizedDescription)
-                    appState.executionService.output = "Error: \(error.localizedDescription)"
+                    appState.executionService.output = "❌ Error: \(error.localizedDescription)\n\nMake sure your project has a Package.swift, package.json, or main file."
                 }
             }
         }

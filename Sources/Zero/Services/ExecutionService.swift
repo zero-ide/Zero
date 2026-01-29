@@ -20,7 +20,7 @@ class ExecutionService: ObservableObject {
     func run(container: String, command: String) async {
         await MainActor.run {
             self.status = .running
-            self.output = ""
+            // output 초기화하지 않음 (이전 로그 유지)
         }
         
         do {
@@ -29,13 +29,13 @@ class ExecutionService: ObservableObject {
             let result = try dockerService.executeShell(container: container, script: fullCommand)
             
             await MainActor.run {
-                self.output = result
+                self.output += "\n" + result
                 self.status = .success
             }
         } catch {
             await MainActor.run {
                 self.status = .failed(error.localizedDescription)
-                self.output = "Error: \(error.localizedDescription)"
+                self.output += "\n❌ Execution Error: \(error.localizedDescription)"
             }
         }
     }

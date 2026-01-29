@@ -47,7 +47,7 @@ final class ExecutionServiceTests: XCTestCase {
         
         // Then
         XCTAssertEqual(service.status, .success)
-        XCTAssertEqual(service.output, "Hello World\n")
+        XCTAssertTrue(service.output.contains("Hello World"))
     }
 }
 
