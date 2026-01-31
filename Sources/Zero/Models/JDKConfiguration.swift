@@ -1,6 +1,6 @@
 import Foundation
 
-struct JDKConfiguration: Codable, Identifiable, Equatable {
+struct JDKConfiguration: Codable, Identifiable, Equatable, Hashable {
     let id: UUID
     let name: String
     let image: String
