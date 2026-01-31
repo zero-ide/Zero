@@ -1,4 +1,4 @@
-# 대화 컨텍스트 - 2026-01-30
+# 대화 컨텍스트 - 2026-01-30 ~ 2026-02-01
 
 ## 참여자
 - **User**: 스ㅇ원 (javaSpring, GitHub: ori0o0p)
@@ -11,6 +11,8 @@
 4. 후배 멘토링 로드맵 (소마고 출신, 1.5년 후 취업)
 5. 클라이밍 CRM 백엔드 프로젝트 기획
 6. Zero 프로젝트 이해 및 컨텍스트 저장
+7. **Zero 프로젝트 IDE-9~12 완료** (Java Build Configuration)
+8. **Zero 프로젝트 IDE-13, 14 계획** (테스트 및 Git 통합)
 
 ## 핵심 결정사항
 
@@ -32,8 +34,24 @@
 
 ### 4. 문서 저장 위치
 - `~/Documents/mentoring/climbing-crm-backend/` - 멘토링 문서
-- `~/zero/context/` - Zero 프로젝트 관련 컨텍스트
+- `~/zero/.context/` - Zero 프로젝트 관련 컨텍스트
+
+### 5. Zero 프로젝트 개발 완료 (IDE-9~12)
+- **IDE-9**: Java Build Configuration (JDK 선택, 설정 저장, UI, ExecutionService 연동)
+- **IDE-10**: 설정 패널 UI 통합 (SettingsView, Cmd + ,)
+- **IDE-11**: 컨테이너 생성 개선 (프로젝트 타입별 이미지 선택)
+- **IDE-12**: Maven/Gradle 자동 감지 및 Spring Boot 지원
+
+### 6. Zero 프로젝트 계획 (IDE-13, 14)
+- **IDE-13**: 테스트 및 품질 개선 (ViewInspector 제거, 통합 테스트)
+- **IDE-14**: Git 통합 개선 (commit, branch, push, pull UI)
+
+### 7. 개발 규칙 확정
+- **TDD**: Red → Green → Blue 커밋 사이클
+- **작업 분해**: 어려운 작업은 단순한 단위까지 쪼개서 진행 (PR도 분리)
+- **단순하게**: 어려운 문제를 복잡하게 풀지 말고, 단순하게 접근
+- **커밋 메시지**: `type(scope): description` 형식
 
 ## 다음 작업
-- Zero 프로젝트 작업 시작
-- 기존 IDE 기능 개선 또는 새 기능 개발
+- IDE-13: 테스트 및 품질 개선
+- IDE-14: Git 통합 개선
