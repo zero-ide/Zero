@@ -70,6 +70,12 @@ Zero/
 - **IDE-4~6**: UI Integration, Editor
 - **IDE-7**: File I/O
 - **IDE-8**: Lightweight Container (Alpine), Organization Support
+- **IDE-9**: Java Build Configuration (JDK 선택, Maven/Gradle, Spring Boot)
+- **IDE-10**: Settings Panel Integration (BuildConfigurationView in Settings)
+- **IDE-11**: Container Image Selection (JDK 이미지, 프로젝트 타입별)
+- **IDE-12**: Maven/Gradle Auto-detection (Spring Boot 지원)
+- **IDE-13**: Testing & Quality Improvement (계획)
+- **IDE-14**: Git Integration Enhancement (commit, branch, push - 계획)
 
 ### 저장소
 - GitHub: https://github.com/ori0o0p/Zero
