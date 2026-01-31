@@ -10,11 +10,13 @@ enum ExecutionStatus: Equatable {
 
 class ExecutionService: ObservableObject {
     let dockerService: DockerServiceProtocol
+    let buildConfigService: BuildConfigurationService
     @Published var status: ExecutionStatus = .idle
     @Published var output: String = ""
     
-    init(dockerService: DockerServiceProtocol) {
+    init(dockerService: DockerServiceProtocol, buildConfigService: BuildConfigurationService = FileBasedBuildConfigurationService()) {
         self.dockerService = dockerService
+        self.buildConfigService = buildConfigService
     }
     
     func run(container: String, command: String) async {
@@ -50,13 +52,25 @@ class ExecutionService: ObservableObject {
         } else if command.contains("python") {
             await MainActor.run { self.output += "\n📦 Installing Python..." }
             _ = try dockerService.executeShell(container: container, script: "apk add --no-cache python3")
-        } else if command.contains("javac") {
-            await MainActor.run { self.output += "\n📦 Installing Java..." }
-            _ = try dockerService.executeShell(container: container, script: "apk add --no-cache openjdk21")
+        } else if command.contains("javac") || command.contains("mvn") || command.contains("gradle") {
+            await MainActor.run { self.output += "\n📦 Setting up Java environment..." }
+            // Note: JDK should be pre-installed in the container image
+            // This is handled by using the configured JDK image
         } else if command.contains("go") {
             await MainActor.run { self.output += "\n📦 Installing Go..." }
             _ = try dockerService.executeShell(container: container, script: "apk add --no-cache go")
         }
+    }
+    
+    func createJavaContainer(name: String) async throws -> String {
+        let config = try buildConfigService.load()
+        let jdkImage = config.selectedJDK.image
+        
+        await MainActor.run {
+            self.output += "\n🐳 Creating container with \(config.selectedJDK.name)..."
+        }
+        
+        return try dockerService.runContainer(image: jdkImage, name: name)
     }
     
     func detectRunCommand(container: String) async throws -> String {
