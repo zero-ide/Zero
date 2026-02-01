@@ -12,9 +12,11 @@ struct LoginView: View {
     var body: some View {
         VStack(spacing: 24) {
             // Logo
-            Image(systemName: "slash.circle")
-                .font(.system(size: 80))
-                .foregroundStyle(.primary)
+            Image("logo")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 80, height: 80)
+                .cornerRadius(16)
             
             Text("Zero")
                 .font(.largeTitle)
