@@ -13,6 +13,7 @@ struct EditorView: View {
     @State private var cursorLine: Int = 1
     @State private var cursorColumn: Int = 1
     @State private var showTerminal: Bool = false
+    @State private var showGitPanel: Bool = false
     
     @EnvironmentObject var appState: AppState
     
@@ -153,13 +154,23 @@ struct EditorView: View {
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(selectedFile == nil || isSaving)
                 
-                Button(action: { 
+                Button(action: {
                     withAnimation { showTerminal.toggle() }
                 }) {
                     Label("Terminal", systemImage: "terminal")
                         .foregroundStyle(showTerminal ? Color.accentColor : Color.primary)
                 }
+                
+                Button(action: {
+                    withAnimation { showGitPanel.toggle() }
+                }) {
+                    Label("Git", systemImage: "branch")
+                        .foregroundStyle(showGitPanel ? Color.accentColor : Color.primary)
+                }
             }
+        }
+        .sheet(isPresented: $showGitPanel) {
+            GitPanelSheet(session: session)
         }
     }
     
@@ -243,5 +254,76 @@ struct EditorView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Git Panel Sheet
+
+struct GitPanelSheet: View {
+    let session: Session
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedTab = 0
+    
+    private var gitService: GitService {
+        GitService(runner: DockerService())
+    }
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Tab Picker
+                Picker("", selection: $selectedTab) {
+                    Text("Changes").tag(0)
+                    Text("History").tag(1)
+                    Text("Stash").tag(2)
+                }
+                .pickerStyle(.segmented)
+                .padding()
+                
+                Divider()
+                
+                // Content
+                switch selectedTab {
+                case 0:
+                    GitPanelView()
+                        .onAppear {
+                            setupGitPanel()
+                        }
+                case 1:
+                    GitHistoryView()
+                        .onAppear {
+                            setupGitHistory()
+                        }
+                case 2:
+                    GitStashView()
+                        .onAppear {
+                            setupGitStash()
+                        }
+                default:
+                    EmptyView()
+                }
+            }
+            .navigationTitle("Git")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .frame(minWidth: 400, minHeight: 500)
+    }
+    
+    private func setupGitPanel() {
+        // This would be handled by the view model in a real implementation
+    }
+    
+    private func setupGitHistory() {
+        // This would be handled by the view model in a real implementation
+    }
+    
+    private func setupGitStash() {
+        // This would be handled by the view model in a real implementation
     }
 }
