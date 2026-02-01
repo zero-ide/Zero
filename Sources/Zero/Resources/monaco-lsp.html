@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; overflow: hidden; background: #1e1e1e; }
+        #editor { width: 100%; height: 100%; }
+        #status { 
+            position: fixed; 
+            bottom: 0; 
+            right: 0; 
+            padding: 4px 8px; 
+            background: #007acc; 
+            color: white; 
+            font-size: 12px;
+            display: none;
+        }
+        #status.connected { display: block; background: #4caf50; }
+        #status.disconnected { display: block; background: #f44336; }
+    </style>
+</head>
+<body>
+    <div id="editor"></div>
+    <div id="status">LSP</div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+    <script>
+        let editor;
+        let lspSocket;
+        let lspEnabled = false;
+        let requestId = 0;
+        const pendingRequests = new Map();
+        
+        // LSP Message Types
+        const LSP_METHODS = {
+            INITIALIZE: 'initialize',
+            COMPLETION: 'textDocument/completion',
+            HOVER: 'textDocument/hover',
+            DEFINITION: 'textDocument/definition',
+            DID_OPEN: 'textDocument/didOpen',
+            DID_CHANGE: 'textDocument/didChange'
+        };
+        
+        require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
+        require(['vs/editor/editor.main'], function () {
+            editor = monaco.editor.create(document.getElementById('editor'), {
+                value: '',
+                language: 'java',
+                theme: 'vs-dark',
+                fontSize: 14,
+                minimap: { enabled: true },
+                automaticLayout: true,
+                quickSuggestions: true,
+                suggestOnTriggerCharacters: true,
+                acceptSuggestionOnEnter: 'on'
+            });
+            
+            // Notify native app that editor is ready
+            window.webkit.messageHandlers.editorReady.postMessage('ready');
+            
+            // Content change listener
+            editor.onDidChangeModelContent(() => {
+                window.webkit.messageHandlers.contentChanged.postMessage(editor.getValue());
+                
+                // Send LSP didChange notification if connected
+                if (lspEnabled && lspSocket) {
+                    sendLSPNotification(LSP_METHODS.DID_CHANGE, {
+                        textDocument: { uri: getDocumentURI() },
+                        contentChanges: [{ text: editor.getValue() }]
+                    });
+                }
+            });
+            
+            // Setup LSP completion provider
+            setupLSPCompletion();
+        });
+        
+        // Connect to LSP WebSocket
+        function connectLSP() {
+            const statusEl = document.getElementById('status');
+            statusEl.className = 'disconnected';
+            statusEl.textContent = 'LSP Connecting...';
+            
+            lspSocket = new WebSocket('ws://localhost:8080');
+            
+            lspSocket.onopen = () => {
+                console.log('✅ LSP Connected');
+                lspEnabled = true;
+                statusEl.className = 'connected';
+                statusEl.textContent = 'LSP Connected';
+                
+                // Send initialize request
+                sendLSPRequest(LSP_METHODS.INITIALIZE, {
+                    processId: null,
+                    rootUri: 'file:///workspace',
+                    capabilities: {
+                        textDocument: {
+                            completion: { dynamicRegistration: false },
+                            hover: { dynamicRegistration: false }
+                        }
+                    }
+                });
+                
+                // Send didOpen
+                sendLSPNotification(LSP_METHODS.DID_OPEN, {
+                    textDocument: {
+                        uri: getDocumentURI(),
+                        languageId: 'java',
+                        version: 1,
+                        text: editor.getValue()
+                    }
+                });
+            };
+            
+            lspSocket.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                handleLSPMessage(message);
+            };
+            
+            lspSocket.onclose = () => {
+                console.log('❌ LSP Disconnected');
+                lspEnabled = false;
+                statusEl.className = 'disconnected';
+                statusEl.textContent = 'LSP Disconnected';
+            };
+            
+            lspSocket.onerror = (error) => {
+                console.error('LSP Error:', error);
+                statusEl.className = 'disconnected';
+                statusEl.textContent = 'LSP Error';
+            };
+        }
+        
+        // Setup LSP-based completion
+        function setupLSPCompletion() {
+            // Register completion provider for Java
+            monaco.languages.registerCompletionItemProvider('java', {
+                triggerCharacters: ['.', ':'],
+                provideCompletionItems: async (model, position) => {
+                    if (!lspEnabled || !lspSocket) {
+                        // Fallback to basic suggestions
+                        return { suggestions: [] };
+                    }
+                    
+                    try {
+                        const result = await sendLSPRequest(LSP_METHODS.COMPLETION, {
+                            textDocument: { uri: getDocumentURI() },
+                            position: {
+                                line: position.lineNumber - 1,
+                                character: position.column - 1
+                            }
+                        });
+                        
+                        if (result && result.items) {
+                            const suggestions = result.items.map(item => ({
+                                label: item.label,
+                                kind: mapCompletionItemKind(item.kind),
+                                detail: item.detail,
+                                documentation: item.documentation,
+                                insertText: item.insertText || item.label,
+                                range: {
+                                    startLineNumber: position.lineNumber,
+                                    startColumn: position.column,
+                                    endLineNumber: position.lineNumber,
+                                    endColumn: position.column
+                                }
+                            }));
+                            
+                            return { suggestions };
+                        }
+                    } catch (e) {
+                        console.error('Completion error:', e);
+                    }
+                    
+                    return { suggestions: [] };
+                }
+            });
+        }
+        
+        // Send LSP request
+        function sendLSPRequest(method, params) {
+            return new Promise((resolve, reject) => {
+                const id = ++requestId;
+                pendingRequests.set(id, { resolve, reject });
+                
+                const message = { jsonrpc: '2.0', id, method, params };
+                lspSocket.send(JSON.stringify(message));
+                
+                // Timeout after 5 seconds
+                setTimeout(() => {
+                    if (pendingRequests.has(id)) {
+                        pendingRequests.delete(id);
+                        reject(new Error('LSP request timeout'));
+                    }
+                }, 5000);
+            });
+        }
+        
+        // Send LSP notification
+        function sendLSPNotification(method, params) {
+            const message = { jsonrpc: '2.0', method, params };
+            lspSocket.send(JSON.stringify(message));
+        }
+        
+        // Handle LSP response
+        function handleLSPMessage(message) {
+            if (message.id !== undefined && pendingRequests.has(message.id)) {
+                const { resolve, reject } = pendingRequests.get(message.id);
+                pendingRequests.delete(message.id);
+                
+                if (message.error) {
+                    reject(message.error);
+                } else {
+                    resolve(message.result);
+                }
+            }
+        }
+        
+        // Map LSP completion item kind to Monaco
+        function mapCompletionItemKind(kind) {
+            const kinds = [
+                monaco.languages.CompletionItemKind.Text,
+                monaco.languages.CompletionItemKind.Method,
+                monaco.languages.CompletionItemKind.Function,
+                monaco.languages.CompletionItemKind.Constructor,
+                monaco.languages.CompletionItemKind.Field,
+                monaco.languages.CompletionItemKind.Variable,
+                monaco.languages.CompletionItemKind.Class,
+                monaco.languages.CompletionItemKind.Interface,
+                monaco.languages.CompletionItemKind.Module,
+                monaco.languages.CompletionItemKind.Property,
+                monaco.languages.CompletionItemKind.Unit,
+                monaco.languages.CompletionItemKind.Value,
+                monaco.languages.CompletionItemKind.Enum,
+                monaco.languages.CompletionItemKind.Keyword,
+                monaco.languages.CompletionItemKind.Snippet,
+                monaco.languages.CompletionItemKind.Color,
+                monaco.languages.CompletionItemKind.File,
+                monaco.languages.CompletionItemKind.Reference
+            ];
+            return kinds[kind] || monaco.languages.CompletionItemKind.Text;
+        }
+        
+        // Get document URI
+        function getDocumentURI() {
+            return 'file:///workspace/Main.java';
+        }
+        
+        // External functions called from Swift
+        function setContent(content, language) {
+            if (editor) {
+                monaco.editor.setModelLanguage(editor.getModel(), language || 'java');
+                editor.setValue(content);
+            }
+        }
+        
+        function getContent() {
+            return editor ? editor.getValue() : '';
+        }
+        
+        function enableLSP() {
+            connectLSP();
+        }
+        
+        function disableLSP() {
+            if (lspSocket) {
+                lspSocket.close();
+            }
+            lspEnabled = false;
+        }
+    </script>
+</body>
+</html>
