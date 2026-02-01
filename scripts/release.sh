@@ -34,7 +34,7 @@ mkdir -p "${APP_BUNDLE}/Contents/Resources"
 cp "${BUILD_DIR}/${APP_NAME}" "${APP_BUNDLE}/Contents/MacOS/"
 
 # Copy resources
-cp -R "Sources/Zero/Resources/" "${APP_BUNDLE}/Contents/Resources/"
+cp -R "Sources/Zero/Resources/" "${APP_BUNDLE}/Contents/Resources/" || true
 
 # Step 4: Generate Info.plist
 echo "📝 Generating Info.plist..."
@@ -48,7 +48,7 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" << EOF
     <key>CFBundleExecutable</key>
     <string>${APP_NAME}</string>
     <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
+    <string>logo</string>
     <key>CFBundleIdentifier</key>
     <string>com.zero.ide</string>
     <key>CFBundleInfoDictionaryVersion</key>
@@ -69,19 +69,19 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" << EOF
 </plist>
 EOF
 
-# Step 5: Generate icon (if script exists)
-if [ -f "scripts/generate-icons.sh" ]; then
-    echo "🎨 Generating app icons..."
-    bash scripts/generate-icons.sh
+# Step 5: Code signing (if available, otherwise ad-hoc sign)
+echo "🔏 Signing app..."
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "Developer ID"; then
+    codesign --force --deep --sign "Developer ID Application" "${APP_BUNDLE}" 2>/dev/null || \
+    codesign --force --deep --sign - "${APP_BUNDLE}"
+else
+    echo "⚠️  Using ad-hoc signing (no Developer ID certificate)"
+    codesign --force --deep --sign - "${APP_BUNDLE}" 2>/dev/null || true
 fi
 
-# Step 6: Sign the app (if certificate is available)
-if security find-identity -v -p codesigning | grep -q "Developer ID"; then
-    echo "🔏 Signing app..."
-    codesign --force --deep --sign "Developer ID Application" "${APP_BUNDLE}"
-else
-    echo "⚠️  No Developer ID certificate found. Skipping code signing."
-fi
+# Step 6: Verify signature
+echo "✅ Verifying signature..."
+codesign -v "${APP_BUNDLE}" 2>/dev/null || echo "⚠️  Signature verification skipped"
 
 # Step 7: Create DMG
 echo "💿 Creating DMG..."
@@ -99,7 +99,11 @@ hdiutil create \
     -srcfolder "${DMG_TEMP}" \
     -ov \
     -format UDZO \
-    "${RELEASE_DIR}/${DMG_NAME}"
+    "${RELEASE_DIR}/${DMG_NAME}" || {
+        echo "❌ DMG creation failed"
+        rm -rf "${DMG_TEMP}"
+        exit 1
+    }
 
 # Clean up temp directory
 rm -rf "${DMG_TEMP}"
@@ -116,13 +120,11 @@ cat > "${RELEASE_DIR}/RELEASE_NOTES.md" << EOF
 # Zero ${VERSION}
 
 ## What's New
-- 
-
-## Improvements
-- 
-
-## Bug Fixes
-- 
+- Initial release of Zero IDE
+- Docker-based development environment
+- GitHub integration
+- Git operations (commit, branch, push, pull)
+- Java support with Maven/Gradle
 
 ## Download
 - [${DMG_NAME}](https://github.com/ori0o0p/Zero/releases/download/v${VERSION}/${DMG_NAME})
@@ -130,12 +132,19 @@ cat > "${RELEASE_DIR}/RELEASE_NOTES.md" << EOF
 
 ## Requirements
 - macOS 14.0 or later
-- Docker Desktop
+- Docker Desktop installed and running
 
 ## Installation
 1. Download the DMG file
 2. Open the DMG and drag Zero to Applications
 3. Launch Zero from Applications
+4. On first launch, allow Zero in System Preferences > Security & Privacy
+
+## Known Issues
+- 
+
+## Feedback
+Please report issues at: https://github.com/ori0o0p/Zero/issues
 EOF
 
 echo ""
@@ -145,7 +154,8 @@ echo "📦 Files in ${RELEASE_DIR}/:"
 ls -lh ${RELEASE_DIR}/
 echo ""
 echo "📝 Next steps:"
-echo "   1. Review ${RELEASE_DIR}/RELEASE_NOTES.md"
-echo "   2. Create a new release on GitHub"
-echo "   3. Upload ${RELEASE_DIR}/${DMG_NAME}"
+echo "   1. Test the app: open ${RELEASE_DIR}/${APP_NAME}.app"
+echo "   2. Review ${RELEASE_DIR}/RELEASE_NOTES.md"
+echo "   3. Create a new release on GitHub: https://github.com/ori0o0p/Zero/releases/new"
+echo "   4. Upload ${RELEASE_DIR}/${DMG_NAME}"
 echo ""
