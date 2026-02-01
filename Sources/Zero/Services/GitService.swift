@@ -45,6 +45,13 @@ struct GitBranch: Codable, Identifiable {
     let commitMessage: String?
 }
 
+struct GitStash: Codable, Identifiable {
+    let id = UUID()
+    let index: Int
+    let hash: String
+    let message: String
+}
+
 // MARK: - Git Service
 
 struct GitService {
@@ -301,5 +308,100 @@ struct GitService {
     func diffStaged(in containerName: String) throws -> String {
         let command = "cd /workspace && git diff --staged"
         return try runner.executeShell(container: containerName, script: command)
+    }
+    
+    // MARK: - Stash
+    
+    func stash(message: String? = nil, in containerName: String) throws {
+        let command: String
+        if let message = message {
+            let escapedMessage = message.replacingOccurrences(of: "\"", with: "\\\"")
+            command = "cd /workspace && git stash push -m \"\(escapedMessage)\""
+        } else {
+            command = "cd /workspace && git stash push"
+        }
+        _ = try runner.executeShell(container: containerName, script: command)
+    }
+    
+    func stashList(in containerName: String) throws -> [GitStash] {
+        let command = "cd /workspace && git stash list --format='%H|%s'"
+        let output = try runner.executeShell(container: containerName, script: command)
+        
+        var stashes: [GitStash] = []
+        let lines = output.components(separatedBy: .newlines)
+        
+        for (index, line) in lines.enumerated() {
+            let parts = line.components(separatedBy: "|")
+            guard parts.count >= 2 else { continue }
+            
+            stashes.append(GitStash(
+                index: index,
+                hash: parts[0],
+                message: parts[1]
+            ))
+        }
+        
+        return stashes
+    }
+    
+    func stashPop(index: Int = 0, in containerName: String) throws {
+        let command = "cd /workspace && git stash pop stash@{\(index)}"
+        _ = try runner.executeShell(container: containerName, script: command)
+    }
+    
+    func stashApply(index: Int = 0, in containerName: String) throws {
+        let command = "cd /workspace && git stash apply stash@{\(index)}"
+        _ = try runner.executeShell(container: containerName, script: command)
+    }
+    
+    func stashDrop(index: Int, in containerName: String) throws {
+        let command = "cd /workspace && git stash drop stash@{\(index)}"
+        _ = try runner.executeShell(container: containerName, script: command)
+    }
+    
+    // MARK: - Merge
+    
+    func merge(branch: String, in containerName: String) throws {
+        let command = "cd /workspace && git merge \(branch)"
+        _ = try runner.executeShell(container: containerName, script: command)
+    }
+    
+    func mergeAbort(in containerName: String) throws {
+        let command = "cd /workspace && git merge --abort"
+        _ = try runner.executeShell(container: containerName, script: command)
+    }
+    
+    // MARK: - Rebase
+    
+    func rebase(branch: String, in containerName: String) throws {
+        let command = "cd /workspace && git rebase \(branch)"
+        _ = try runner.executeShell(container: containerName, script: command)
+    }
+    
+    func rebaseAbort(in containerName: String) throws {
+        let command = "cd /workspace && git rebase --abort"
+        _ = try runner.executeShell(container: containerName, script: command)
+    }
+    
+    func rebaseContinue(in containerName: String) throws {
+        let command = "cd /workspace && git rebase --continue"
+        _ = try runner.executeShell(container: containerName, script: command)
+    }
+    
+    // MARK: - Conflict Resolution
+    
+    func isMergeConflict(in containerName: String) throws -> Bool {
+        let command = "cd /workspace && git diff --name-only --diff-filter=U"
+        let output = try runner.executeShell(container: containerName, script: command)
+        return !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    
+    func conflictedFiles(in containerName: String) throws -> [String] {
+        let command = "cd /workspace && git diff --name-only --diff-filter=U"
+        let output = try runner.executeShell(container: containerName, script: command)
+        
+        return output.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
     }
 }
