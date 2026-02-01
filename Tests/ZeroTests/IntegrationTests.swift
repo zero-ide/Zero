@@ -208,17 +208,3 @@ class SessionManagerIntegrationTests: XCTestCase {
         XCTAssertFalse(sessions.contains { $0.id == session.id })
     }
 }
-
-// MARK: - Mock
-
-class MockCommandRunner: CommandRunning {
-    var mockOutput: String = ""
-    var mockError: Error?
-    
-    func execute(command: String, arguments: [String]) throws -> String {
-        if let error = mockError {
-            throw error
-        }
-        return mockOutput
-    }
-}
