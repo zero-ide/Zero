@@ -83,16 +83,30 @@ struct EditorView: View {
                     
                     Divider()
                     
-                    // 에디터
-                    CodeEditorView(
-                        content: $fileContent,
-                        language: currentLanguage,
-                        onReady: { isEditorReady = true },
-                        onCursorChange: { line, column in
-                            cursorLine = line
-                            cursorColumn = column
+                    // 에디터 (모든 파일 기존 CodeEditorView 사용, Java일 때만 LSP 추가)
+                    ZStack(alignment: .bottomLeading) {
+                        CodeEditorView(
+                            content: $fileContent,
+                            language: currentLanguage,
+                            onReady: { isEditorReady = true },
+                            onCursorChange: { line, column in
+                                cursorLine = line
+                                cursorColumn = column
+                            }
+                        )
+                        
+                        // LSP 자동완성 (Java일 때만)
+                        if currentLanguage == "java" {
+                            LSPCompletionView(
+                                language: currentLanguage,
+                                onSelect: { suggestion in
+                                    // 선택된 제안 삽입 로직
+                                    fileContent += suggestion
+                                }
+                            )
+                            .offset(x: 20, y: -20)
                         }
-                    )
+                    }
                     .onChange(of: fileContent) { _, _ in
                         if !isLoadingFile {
                             hasUnsavedChanges = true
