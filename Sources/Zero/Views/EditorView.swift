@@ -84,15 +84,31 @@ struct EditorView: View {
                     Divider()
                     
                     // 에디터
-                    CodeEditorView(
-                        content: $fileContent,
-                        language: currentLanguage,
-                        onReady: { isEditorReady = true },
-                        onCursorChange: { line, column in
-                            cursorLine = line
-                            cursorColumn = column
+                    Group {
+                        if currentLanguage == "java" {
+                            // Java LSP 버전
+                            MonacoLSPWebView(
+                                content: $fileContent,
+                                language: currentLanguage,
+                                onReady: { isEditorReady = true },
+                                onCursorChange: { line, column in
+                                    cursorLine = line
+                                    cursorColumn = column
+                                }
+                            )
+                        } else {
+                            // 기본 Monaco
+                            CodeEditorView(
+                                content: $fileContent,
+                                language: currentLanguage,
+                                onReady: { isEditorReady = true },
+                                onCursorChange: { line, column in
+                                    cursorLine = line
+                                    cursorColumn = column
+                                }
+                            )
                         }
-                    )
+                    }
                     .onChange(of: fileContent) { _, _ in
                         if !isLoadingFile {
                             hasUnsavedChanges = true
