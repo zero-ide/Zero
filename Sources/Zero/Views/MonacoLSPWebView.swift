@@ -129,8 +129,14 @@ struct MonacoLSPWebView: NSViewRepresentable {
                 
                 window.webkit.messageHandlers.editorReady.postMessage('ready');
                 
+                // Add change listener with delay to avoid rapid firing
+                let changeTimeout;
                 editor.onDidChangeModelContent(() => {
-                    window.webkit.messageHandlers.contentChanged.postMessage(editor.getValue());
+                    clearTimeout(changeTimeout);
+                    changeTimeout = setTimeout(() => {
+                        const value = editor.getValue();
+                        window.webkit.messageHandlers.contentChanged.postMessage(value);
+                    }, 100);
                 });
                 
                 editor.onDidChangeCursorPosition((e) => {
