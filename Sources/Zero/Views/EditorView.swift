@@ -83,21 +83,16 @@ struct EditorView: View {
                     
                     Divider()
                     
-                    // 에디터
+                    // 에디터 (Java일 때 Monaco + LSP, 나머지는 Highlightr)
                     Group {
                         if currentLanguage == "java" {
-                            // Java LSP 버전
-                            MonacoLSPWebView(
+                            MonacoWebView(
                                 content: $fileContent,
                                 language: currentLanguage,
                                 onReady: { isEditorReady = true },
-                                onCursorChange: { line, column in
-                                    cursorLine = line
-                                    cursorColumn = column
-                                }
+                                enableLSP: true
                             )
                         } else {
-                            // 기본 Monaco
                             CodeEditorView(
                                 content: $fileContent,
                                 language: currentLanguage,
