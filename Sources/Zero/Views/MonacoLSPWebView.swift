@@ -86,7 +86,7 @@ struct MonacoLSPWebView: NSViewRepresentable {
         <meta charset="UTF-8">
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
-            html, body { height: 100%; overflow: hidden; background: #1e1e1e; }
+            html, body { height: 100%; overflow: hidden; background: #ffffff; }
             #editor { width: 100%; height: 100%; }
             #status { 
                 position: fixed; 
@@ -119,7 +119,7 @@ struct MonacoLSPWebView: NSViewRepresentable {
                 editor = monaco.editor.create(document.getElementById('editor'), {
                     value: '',
                     language: 'java',
-                    theme: 'vs-dark',
+                    theme: 'vs',
                     fontSize: 14,
                     minimap: { enabled: true },
                     automaticLayout: true,
