@@ -83,25 +83,28 @@ struct EditorView: View {
                     
                     Divider()
                     
-                    // 에디터 (Java일 때 Monaco + LSP, 나머지는 Highlightr)
-                    Group {
+                    // 에디터 (모든 파일 기존 CodeEditorView 사용, Java일 때만 LSP 추가)
+                    ZStack(alignment: .bottomLeading) {
+                        CodeEditorView(
+                            content: $fileContent,
+                            language: currentLanguage,
+                            onReady: { isEditorReady = true },
+                            onCursorChange: { line, column in
+                                cursorLine = line
+                                cursorColumn = column
+                            }
+                        )
+                        
+                        // LSP 자동완성 (Java일 때만)
                         if currentLanguage == "java" {
-                            MonacoWebView(
-                                content: $fileContent,
+                            LSPCompletionView(
                                 language: currentLanguage,
-                                onReady: { isEditorReady = true },
-                                enableLSP: true
-                            )
-                        } else {
-                            CodeEditorView(
-                                content: $fileContent,
-                                language: currentLanguage,
-                                onReady: { isEditorReady = true },
-                                onCursorChange: { line, column in
-                                    cursorLine = line
-                                    cursorColumn = column
+                                onSelect: { suggestion in
+                                    // 선택된 제안 삽입 로직
+                                    fileContent += suggestion
                                 }
                             )
+                            .offset(x: 20, y: -20)
                         }
                     }
                     .onChange(of: fileContent) { _, _ in
