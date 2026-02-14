@@ -16,6 +16,7 @@ protocol DockerServiceProtocol: ContainerRunning {
     func stopContainer(name: String) throws
     func removeContainer(name: String) throws
     func fileExists(container: String, path: String) throws -> Bool
+    func cancelCurrentExecution()
 }
 
 struct DockerService: DockerServiceProtocol {
@@ -105,5 +106,9 @@ struct DockerService: DockerServiceProtocol {
         } catch {
             return false
         }
+    }
+
+    func cancelCurrentExecution() {
+        runner.cancelCurrentCommand()
     }
 }
