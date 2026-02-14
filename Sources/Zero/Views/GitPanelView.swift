@@ -27,7 +27,7 @@ struct GitPanelView: View {
             if let errorMessage = panelService.errorMessage, !errorMessage.isEmpty {
                 Divider()
                 InlineErrorBanner(message: errorMessage)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal)
                     .padding(.vertical, 8)
             }
         }
