@@ -14,6 +14,7 @@ class AppState: ObservableObject {
     @Published var currentPage: Int = 1
     @Published var isLoadingMore: Bool = false
     @Published var hasMoreRepos: Bool = true
+    @Published var userFacingError: String? = nil
     
     @Published var organizations: [Organization] = []
     @Published var selectedOrg: Organization? = nil
@@ -70,11 +71,13 @@ class AppState: ObservableObject {
     
     func fetchOrganizations() async {
         guard let token = accessToken else { return }
+        userFacingError = nil
         do {
             let service = gitHubServiceFactory(token)
             self.organizations = try await service.fetchOrganizations()
         } catch {
             print("Failed to fetch orgs: \(error)")
+            userFacingError = "Failed to load organizations. Please try again."
         }
     }
     
@@ -83,6 +86,7 @@ class AppState: ObservableObject {
         isLoading = true
         currentPage = 1
         hasMoreRepos = true
+        userFacingError = nil
         defer { isLoading = false }
         
         do {
@@ -104,6 +108,7 @@ class AppState: ObservableObject {
             }
         } catch {
             print("Failed to fetch repos: \(error)")
+            userFacingError = "Failed to load repositories. Please check your token and network."
         }
     }
     
@@ -137,14 +142,17 @@ class AppState: ObservableObject {
             }
         } catch {
             print("Failed to load more repos: \(error)")
+            userFacingError = "Failed to load more repositories."
         }
     }
     
     func loadSessions() {
         do {
             self.sessions = try sessionManager.loadSessions()
+            userFacingError = nil
         } catch {
             print("Failed to load sessions: \(error)")
+            userFacingError = "Failed to load sessions."
         }
     }
     
@@ -154,6 +162,7 @@ class AppState: ObservableObject {
         
         isLoading = true
         loadingMessage = "Creating container..."
+        userFacingError = nil
         
         do {
             let session = try await orchestrator.startSession(repo: repo, token: token)
@@ -163,6 +172,7 @@ class AppState: ObservableObject {
         } catch {
             print("Failed to start session: \(error)")
             loadingMessage = "Error: \(error.localizedDescription)"
+            userFacingError = "Failed to start session: \(error.localizedDescription)"
         }
         
         isLoading = false
@@ -185,9 +195,11 @@ class AppState: ObservableObject {
     func deleteSession(_ session: Session) {
         do {
             try orchestrator.deleteSession(session)
+            userFacingError = nil
             loadSessions()
         } catch {
             print("Failed to delete session: \(error)")
+            userFacingError = "Failed to delete session."
         }
     }
 

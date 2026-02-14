@@ -204,7 +204,7 @@ struct EditorView: View {
                     .padding(.vertical, 8)
                     .background(Color(nsColor: .controlBackgroundColor))
                 }
-                .background(Color.white)
+                .background(Color(nsColor: .windowBackgroundColor))
             }
         }
         .navigationTitle("Zero")
@@ -377,9 +377,9 @@ struct GitPanelSheet: View {
                 case 0:
                     GitPanelView(gitService: gitService, containerName: session.containerName)
                 case 1:
-                    GitHistoryView(gitService: gitService, containerName: session.containerName)
+                    GitHistoryView(gitService: gitService, containerName: session.containerName, showsHeader: false)
                 case 2:
-                    GitStashView(gitService: gitService, containerName: session.containerName)
+                    GitStashView(gitService: gitService, containerName: session.containerName, showsHeader: false)
                 default:
                     EmptyView()
                 }
