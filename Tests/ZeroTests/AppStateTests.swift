@@ -77,6 +77,36 @@ class AppStateTests: XCTestCase {
         XCTAssertFalse(appState.isEditing)
         XCTAssertNil(appState.activeSession)
     }
+
+    func testResumeSessionWithHealthyContainerOpensEditor() async {
+        // Given
+        let session = Session.mock
+        appState.sessionContainerHealthCheck = { _ in true }
+
+        // When
+        await appState.resumeSession(session)
+
+        // Then
+        XCTAssertTrue(appState.isEditing)
+        XCTAssertEqual(appState.activeSession?.id, session.id)
+        XCTAssertNil(appState.userFacingError)
+    }
+
+    func testResumeSessionWithDeadContainerShowsErrorAndSkipsEditor() async {
+        // Given
+        let session = Session.mock
+        appState.sessions = [session]
+        appState.sessionContainerHealthCheck = { _ in false }
+
+        // When
+        await appState.resumeSession(session)
+
+        // Then
+        XCTAssertFalse(appState.isEditing)
+        XCTAssertNil(appState.activeSession)
+        XCTAssertEqual(appState.sessions.count, 0)
+        XCTAssertEqual(appState.userFacingError, "Session is no longer available. Please start a new session.")
+    }
     
     // MARK: - Session Management Tests
     
