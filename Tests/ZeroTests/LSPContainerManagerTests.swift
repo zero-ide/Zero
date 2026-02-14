@@ -3,6 +3,18 @@ import XCTest
 
 @MainActor
 final class LSPContainerManagerTests: XCTestCase {
+    private func makeManager(commandStub: HostCommandStub) -> LSPContainerManager {
+        let dockerRunner = DockerInstallationCommandRunner()
+        let dockerService = DockerService(runner: dockerRunner)
+
+        return LSPContainerManager(
+            dockerService: dockerService,
+            commandRunner: { try await commandStub.run($0) },
+            dockerContextPathResolver: { _ in "/tmp/zero/docker/lsp-java" },
+            sleep: { _ in }
+        )
+    }
+
     func testStartLSPContainerUsesSharedRunningContainer() async throws {
         let runningCheck = "docker ps --filter \"name=^/zero-lsp-java$\" --filter \"status=running\" --format \"{{.Names}}\""
         let commandStub = HostCommandStub(
@@ -11,11 +23,7 @@ final class LSPContainerManagerTests: XCTestCase {
             ]
         )
 
-        let manager = LSPContainerManager(
-            commandRunner: { try await commandStub.run($0) },
-            dockerContextPathResolver: { _ in "/tmp/zero/docker/lsp-java" },
-            sleep: { _ in }
-        )
+        let manager = makeManager(commandStub: commandStub)
 
         let name = try await manager.startLSPContainer(language: "java")
         let executed = await commandStub.executedCommands()
@@ -40,11 +48,7 @@ final class LSPContainerManagerTests: XCTestCase {
             failingCommands: [imageCheck]
         )
 
-        let manager = LSPContainerManager(
-            commandRunner: { try await commandStub.run($0) },
-            dockerContextPathResolver: { _ in "/tmp/zero/docker/lsp-java" },
-            sleep: { _ in }
-        )
+        let manager = makeManager(commandStub: commandStub)
 
         _ = try await manager.startLSPContainer(language: "java")
         let executed = await commandStub.executedCommands()
@@ -68,11 +72,7 @@ final class LSPContainerManagerTests: XCTestCase {
             ]
         )
 
-        let manager = LSPContainerManager(
-            commandRunner: { try await commandStub.run($0) },
-            dockerContextPathResolver: { _ in "/tmp/zero/docker/lsp-java" },
-            sleep: { _ in }
-        )
+        let manager = makeManager(commandStub: commandStub)
 
         _ = try await manager.startLSPContainer(language: "java")
         let executed = await commandStub.executedCommands()
@@ -110,5 +110,15 @@ actor HostCommandStub {
 
     func executedCommands() -> [String] {
         commands
+    }
+}
+
+private final class DockerInstallationCommandRunner: CommandRunning {
+    func execute(command: String, arguments: [String]) throws -> String {
+        if arguments == ["--version"] {
+            return "Docker version 25.0.0"
+        }
+
+        return ""
     }
 }
