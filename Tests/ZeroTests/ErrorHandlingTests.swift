@@ -127,6 +127,8 @@ class MockCommandRunning: CommandRunning {
         }
         return mockOutput
     }
+
+    func cancelCurrentCommand() {}
 }
 
 class MockDockerServiceProtocol: DockerServiceProtocol {
@@ -192,4 +194,6 @@ class MockDockerServiceProtocol: DockerServiceProtocol {
     func fileExists(container: String, path: String) throws -> Bool {
         return !shouldFail
     }
+
+    func cancelCurrentExecution() {}
 }

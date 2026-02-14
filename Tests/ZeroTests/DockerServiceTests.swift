@@ -12,6 +12,8 @@ class MockCommandRunner: CommandRunning {
         self.executedArguments = arguments
         return mockOutput
     }
+
+    func cancelCurrentCommand() {}
 }
 
 final class DockerServiceTests: XCTestCase {
