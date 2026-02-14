@@ -37,6 +37,9 @@
         let currentLanguage = 'java';
         let documentVersion = 1;
         let didOpenSent = false;
+        const REQUEST_TIMEOUT_MS = 5000;
+        const INITIALIZE_TIMEOUT_MS = 30000;
+        const INITIALIZE_RETRY_DELAY_MS = 2000;
 
         // LSP Message Types
         const LSP_METHODS = {
@@ -78,6 +81,13 @@
             postToNative('lspStatus', text);
         }
 
+        function flushPendingRequests(reason) {
+            for (const [id, pending] of pendingRequests.entries()) {
+                pendingRequests.delete(id);
+                pending.reject(new Error(reason));
+            }
+        }
+
         function scheduleReconnect() {
             if (!lspEnabled || reconnectTimer) {
                 return;
@@ -114,7 +124,7 @@
                 postToNative('contentChanged', value);
 
                 // Send LSP didChange notification if connected
-                if (lspEnabled && lspSocket && didOpenSent) {
+                if (lspConnected && lspSocket && didOpenSent) {
                     sendDidChange(value);
                 }
             });
@@ -136,42 +146,31 @@
                 return;
             }
 
-            if (lspSocket && lspSocket.readyState === WebSocket.OPEN) {
+            if (lspSocket && (lspSocket.readyState === WebSocket.OPEN || lspSocket.readyState === WebSocket.CONNECTING)) {
                 return;
             }
 
             setStatus('Connecting...', 'disconnected');
 
-            lspSocket = new WebSocket('ws://localhost:8080');
+            const socket = new WebSocket('ws://localhost:8080');
+            lspSocket = socket;
 
-            lspSocket.onopen = async () => {
-                lspConnected = true;
-                setStatus('Connected', 'connected');
-
-                try {
-                    await sendLSPRequest(LSP_METHODS.INITIALIZE, {
-                        processId: null,
-                        rootUri: 'file:///workspace',
-                        capabilities: {
-                            textDocument: {
-                                completion: { dynamicRegistration: false },
-                                hover: { dynamicRegistration: false }
-                            }
-                        }
-                    });
-
-                    sendDidOpen();
-                } catch (_) {
-                    setStatus('Init Failed', 'disconnected');
-                    lspConnected = false;
-                    didOpenSent = false;
-                    if (lspSocket) {
-                        lspSocket.close();
-                    }
+            socket.onopen = () => {
+                if (socket !== lspSocket) {
+                    return;
                 }
+
+                lspConnected = true;
+                didOpenSent = false;
+                setStatus('Connected', 'connected');
+                initializeLSP(socket);
             };
 
-            lspSocket.onmessage = (event) => {
+            socket.onmessage = (event) => {
+                if (socket !== lspSocket) {
+                    return;
+                }
+
                 try {
                     const message = JSON.parse(event.data);
                     handleLSPMessage(message);
@@ -180,19 +179,70 @@
                 }
             };
 
-            lspSocket.onclose = () => {
+            socket.onclose = () => {
+                if (socket !== lspSocket) {
+                    return;
+                }
+
                 lspConnected = false;
                 lspSocket = null;
                 didOpenSent = false;
+                flushPendingRequests('LSP socket closed');
                 setStatus('Disconnected', 'disconnected');
                 scheduleReconnect();
             };
 
-            lspSocket.onerror = () => {
+            socket.onerror = () => {
+                if (socket !== lspSocket) {
+                    return;
+                }
+
                 lspConnected = false;
                 setStatus('Error', 'disconnected');
-                scheduleReconnect();
+
+                try {
+                    socket.close();
+                } catch (_) {
+                    scheduleReconnect();
+                }
             };
+        }
+
+        function initializeLSP(socket, retryCount = 0) {
+            if (!lspEnabled || !lspConnected || socket !== lspSocket || socket.readyState !== WebSocket.OPEN) {
+                return;
+            }
+
+            sendLSPRequest(LSP_METHODS.INITIALIZE, {
+                processId: null,
+                rootUri: 'file:///workspace',
+                capabilities: {
+                    textDocument: {
+                        completion: { dynamicRegistration: false },
+                        hover: { dynamicRegistration: false }
+                    }
+                }
+            }, socket, INITIALIZE_TIMEOUT_MS)
+            .then(() => {
+                if (socket !== lspSocket || !lspEnabled || !lspConnected) {
+                    return;
+                }
+
+                sendDidOpen();
+            })
+            .catch(() => {
+                if (socket !== lspSocket || !lspEnabled || !lspConnected) {
+                    return;
+                }
+
+                if (retryCount < 2) {
+                    setStatus('Initializing...', 'disconnected');
+                    setTimeout(() => initializeLSP(socket, retryCount + 1), INITIALIZE_RETRY_DELAY_MS);
+                    return;
+                }
+
+                setStatus('Init Delayed', 'disconnected');
+            });
         }
 
         function sendDidOpen() {
@@ -284,9 +334,9 @@
         }
         
         // Send LSP request
-        function sendLSPRequest(method, params) {
+        function sendLSPRequest(method, params, socket = lspSocket, timeoutMs = REQUEST_TIMEOUT_MS) {
             return new Promise((resolve, reject) => {
-                if (!lspSocket || lspSocket.readyState !== WebSocket.OPEN) {
+                if (!socket || socket !== lspSocket || socket.readyState !== WebSocket.OPEN) {
                     reject(new Error('LSP socket is not connected'));
                     return;
                 }
@@ -295,26 +345,26 @@
                 pendingRequests.set(id, { resolve, reject });
 
                 const message = { jsonrpc: '2.0', id, method, params };
-                lspSocket.send(JSON.stringify(message));
+                socket.send(JSON.stringify(message));
                 
-                // Timeout after 5 seconds
                 setTimeout(() => {
                     if (pendingRequests.has(id)) {
                         pendingRequests.delete(id);
                         reject(new Error('LSP request timeout'));
                     }
-                }, 5000);
+                }, timeoutMs);
             });
         }
 
         // Send LSP notification
         function sendLSPNotification(method, params) {
-            if (!lspSocket || lspSocket.readyState !== WebSocket.OPEN) {
+            const socket = lspSocket;
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
                 return;
             }
 
             const message = { jsonrpc: '2.0', method, params };
-            lspSocket.send(JSON.stringify(message));
+            socket.send(JSON.stringify(message));
         }
 
         // Handle LSP response
@@ -416,11 +466,14 @@
                 reconnectTimer = null;
             }
 
+            flushPendingRequests('LSP disabled');
+
             if (lspSocket) {
-                lspSocket.close();
+                const socket = lspSocket;
+                lspSocket = null;
+                socket.close();
             }
 
-            lspSocket = null;
             didOpenSent = false;
             setStatus('Disconnected', 'disconnected');
         }
