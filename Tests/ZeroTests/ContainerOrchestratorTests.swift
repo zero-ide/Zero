@@ -23,6 +23,13 @@ class MockDockerService: DockerServiceProtocol {
         executedScripts.append(script)
         return "mock shell output"
     }
+
+    func executeShellStreaming(container: String, script: String, onOutput: @escaping (String) -> Void) throws -> String {
+        executedScripts.append(script)
+        let output = "mock shell output"
+        onOutput(output)
+        return output
+    }
     
     func runContainer(image: String, name: String) throws -> String {
         didRunContainer = true
