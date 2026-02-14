@@ -3,6 +3,7 @@ import Foundation
 protocol ContainerRunning {
     func executeCommand(container: String, command: String) throws -> String
     func executeShell(container: String, script: String) throws -> String
+    func executeShellStreaming(container: String, script: String, onOutput: @escaping (String) -> Void) throws -> String
 }
 
 protocol DockerServiceProtocol: ContainerRunning {
@@ -10,6 +11,7 @@ protocol DockerServiceProtocol: ContainerRunning {
     func runContainer(image: String, name: String) throws -> String
     func executeCommand(container: String, command: String) throws -> String
     func executeShell(container: String, script: String) throws -> String
+    func executeShellStreaming(container: String, script: String, onOutput: @escaping (String) -> Void) throws -> String
     func listFiles(container: String, path: String) throws -> String
     func readFile(container: String, path: String) throws -> String
     func writeFile(container: String, path: String, content: String) throws
@@ -61,6 +63,11 @@ struct DockerService: DockerServiceProtocol {
     func executeShell(container: String, script: String) throws -> String {
         let args = ["exec", container, "sh", "-c", script]
         return try runner.execute(command: dockerPath, arguments: args)
+    }
+
+    func executeShellStreaming(container: String, script: String, onOutput: @escaping (String) -> Void) throws -> String {
+        let args = ["exec", container, "sh", "-c", script]
+        return try runner.executeStreaming(command: dockerPath, arguments: args, onOutput: onOutput)
     }
     
     /// 디렉토리 파일 목록 조회
