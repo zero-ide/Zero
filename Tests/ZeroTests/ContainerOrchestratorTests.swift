@@ -37,6 +37,7 @@ class MockDockerService: DockerServiceProtocol {
     func stopContainer(name: String) throws {}
     func removeContainer(name: String) throws {}
     func fileExists(container: String, path: String) throws -> Bool { return true }
+    func cancelCurrentExecution() {}
 }
 
 final class ContainerOrchestratorTests: XCTestCase {
