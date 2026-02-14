@@ -37,6 +37,48 @@ final class ExecutionServiceTests: XCTestCase {
         // Then
         XCTAssertEqual(command, "npm start")
     }
+
+    func testDetectRunCommand_DockerfileTakesPriorityOverSwift() async throws {
+        // Given
+        mockDocker.dockerCommandAvailable = true
+        mockDocker.fileExistenceResults = [
+            "Dockerfile": true,
+            "Package.swift": true
+        ]
+
+        // When
+        let command = try await service.detectRunCommand(container: "test-container")
+
+        // Then
+        XCTAssertEqual(command, "docker build -t zero-runner . && docker run --rm zero-runner")
+    }
+
+    func testDetectRunCommand_DockerfileStrategyWhenOnlyDockerfileExists() async throws {
+        // Given
+        mockDocker.dockerCommandAvailable = true
+        mockDocker.fileExistenceResults = ["Dockerfile": true]
+
+        // When
+        let command = try await service.detectRunCommand(container: "test-container")
+
+        // Then
+        XCTAssertEqual(command, "docker build -t zero-runner . && docker run --rm zero-runner")
+    }
+
+    func testDetectRunCommand_DockerfileFallsBackWhenDockerUnavailable() async throws {
+        // Given
+        mockDocker.dockerCommandAvailable = false
+        mockDocker.fileExistenceResults = [
+            "Dockerfile": true,
+            "Package.swift": true
+        ]
+
+        // When
+        let command = try await service.detectRunCommand(container: "test-container")
+
+        // Then
+        XCTAssertEqual(command, "swift run")
+    }
     
     func testExecute_Success() async {
         // Given
@@ -139,6 +181,7 @@ class MockExecutionDockerService: DockerServiceProtocol {
     var cancelCurrentExecutionCalled = false
     var streamingChunks: [String] = []
     var interChunkDelayNanoseconds: UInt64 = 0
+    var dockerCommandAvailable = true
     
     func checkInstallation() throws -> Bool { return true }
     
@@ -154,6 +197,10 @@ class MockExecutionDockerService: DockerServiceProtocol {
     func runContainer(image: String, name: String) throws -> String { return "" }
     func executeCommand(container: String, command: String) throws -> String { return "" }
     func executeShell(container: String, script: String) throws -> String {
+        if script.contains("command -v docker") {
+            return dockerCommandAvailable ? "yes" : "no"
+        }
+
         if shouldBlockUntilCancelled {
             while !cancelCurrentExecutionCalled {
                 usleep(10_000)
