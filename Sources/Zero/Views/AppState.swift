@@ -34,12 +34,17 @@ class AppState: ObservableObject {
     var gitHubServiceFactory: (String) -> GitHubService = { token in
         GitHubService(token: token)
     }
+
+    var sessionContainerHealthCheck: (Session) async -> Bool
     
     init() {
         let docker = DockerService()
         self.executionService = ExecutionService(dockerService: docker)
         self.lspContainerManager = LSPContainerManager(dockerService: docker)
         self.orchestrator = ContainerOrchestrator(dockerService: docker, sessionManager: sessionManager)
+        self.sessionContainerHealthCheck = { session in
+            (try? docker.executeCommand(container: session.containerName, command: "true")) != nil
+        }
         
         checkLoginStatus()
     }
@@ -180,7 +185,23 @@ class AppState: ObservableObject {
     }
     
     /// 기존 세션 재개
-    func resumeSession(_ session: Session) {
+    func resumeSession(_ session: Session) async {
+        userFacingError = nil
+
+        guard await sessionContainerHealthCheck(session) else {
+            sessions.removeAll { $0.id == session.id }
+            do {
+                try sessionManager.deleteSession(session)
+            } catch {
+                print("Failed to clean stale session: \(error)")
+            }
+
+            activeSession = nil
+            isEditing = false
+            userFacingError = "Session is no longer available. Please start a new session."
+            return
+        }
+
         self.activeSession = session
         self.isEditing = true
     }

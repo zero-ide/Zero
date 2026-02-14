@@ -56,7 +56,11 @@ struct RepoListView: View {
                         ForEach(appState.sessions) { session in
                             SessionRow(
                                 session: session,
-                                onResume: { appState.resumeSession(session) },
+                                onResume: {
+                                    Task {
+                                        await appState.resumeSession(session)
+                                    }
+                                },
                                 onDeleteRequest: { pendingDeleteSession = session }
                             )
                         }
