@@ -14,6 +14,7 @@ struct MonacoWebView: NSViewRepresentable {
         value
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\r", with: "\\r")
             .replacingOccurrences(of: "\n", with: "\\n")
     }
 
@@ -80,11 +81,11 @@ struct MonacoWebView: NSViewRepresentable {
         func applyCurrentState(force: Bool = false) {
             guard isReady, let webView else { return }
 
-            if force || parent.content != lastContent {
-                let escapedContent = MonacoWebView.escapeForJavaScriptLiteral(parent.content)
-                let escapedLanguage = MonacoWebView.escapeForJavaScriptLiteral(parent.language)
-                webView.evaluateJavaScript("setContent('\(escapedContent)', '\(escapedLanguage)')")
-                lastContent = parent.content
+            let fileURI = MonacoWebView.fileURI(from: parent.documentPath)
+            if force || fileURI != lastFileURI {
+                let escapedURI = MonacoWebView.escapeForJavaScriptLiteral(fileURI)
+                webView.evaluateJavaScript("setDocumentPath('\(escapedURI)')")
+                lastFileURI = fileURI
             }
 
             if force || parent.language != lastLanguage {
@@ -93,11 +94,11 @@ struct MonacoWebView: NSViewRepresentable {
                 lastLanguage = parent.language
             }
 
-            let fileURI = MonacoWebView.fileURI(from: parent.documentPath)
-            if force || fileURI != lastFileURI {
-                let escapedURI = MonacoWebView.escapeForJavaScriptLiteral(fileURI)
-                webView.evaluateJavaScript("setDocumentPath('\(escapedURI)')")
-                lastFileURI = fileURI
+            if force || parent.content != lastContent {
+                let escapedContent = MonacoWebView.escapeForJavaScriptLiteral(parent.content)
+                let escapedLanguage = MonacoWebView.escapeForJavaScriptLiteral(parent.language)
+                webView.evaluateJavaScript("setContent('\(escapedContent)', '\(escapedLanguage)')")
+                lastContent = parent.content
             }
 
             if force || parent.enableLSP != lspEnabled {
