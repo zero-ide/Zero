@@ -15,6 +15,9 @@ protocol DockerServiceProtocol: ContainerRunning {
     func listFiles(container: String, path: String) throws -> String
     func readFile(container: String, path: String) throws -> String
     func writeFile(container: String, path: String, content: String) throws
+    func ensureDirectory(container: String, path: String) throws
+    func rename(container: String, from: String, to: String) throws
+    func remove(container: String, path: String, recursive: Bool) throws
     func stopContainer(name: String) throws
     func removeContainer(name: String) throws
     func fileExists(container: String, path: String) throws -> Bool
@@ -88,8 +91,24 @@ struct DockerService: DockerServiceProtocol {
         // echo로 직접 쓰면 특수문자 문제가 생기므로 base64 사용
         guard let data = content.data(using: .utf8) else { return }
         let base64 = data.base64EncodedString()
-        let args = ["exec", container, "sh", "-c", "echo '\(base64)' | base64 -d > '\(path)'"]
+        let args = ["exec", container, "sh", "-c", "echo '\(base64)' | base64 -d > \(quotedPath(path))"]
         _ = try runner.execute(command: dockerPath, arguments: args)
+    }
+
+    func ensureDirectory(container: String, path: String) throws {
+        let script = "mkdir -p \(quotedPath(path))"
+        _ = try executeShell(container: container, script: script)
+    }
+
+    func rename(container: String, from: String, to: String) throws {
+        let script = "mv \(quotedPath(from)) \(quotedPath(to))"
+        _ = try executeShell(container: container, script: script)
+    }
+
+    func remove(container: String, path: String, recursive: Bool) throws {
+        let flag = recursive ? "-rf" : "-f"
+        let script = "rm \(flag) \(quotedPath(path))"
+        _ = try executeShell(container: container, script: script)
     }
     
     /// 컨테이너 중지
@@ -117,5 +136,10 @@ struct DockerService: DockerServiceProtocol {
 
     func cancelCurrentExecution() {
         runner.cancelCurrentCommand()
+    }
+
+    private func quotedPath(_ path: String) -> String {
+        let escaped = path.replacingOccurrences(of: "'", with: "'\\''")
+        return "'\(escaped)'"
     }
 }
