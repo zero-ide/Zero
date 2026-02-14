@@ -44,6 +44,14 @@ class ExecutionService: ObservableObject {
             }
         }
     }
+
+    @MainActor
+    func clearOutput() {
+        output = ""
+        if status != .running {
+            status = .idle
+        }
+    }
     
     private func setupEnvironment(for command: String, container: String) async throws {
         if command.contains("npm") {

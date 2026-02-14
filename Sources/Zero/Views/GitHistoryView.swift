@@ -3,6 +3,9 @@ import SwiftUI
 struct GitHistoryView: View {
     @StateObject private var viewModel = GitHistoryViewModel()
     @State private var selectedCommit: GitCommit?
+
+    let gitService: GitService
+    let containerName: String
     
     var body: some View {
         VStack(spacing: 0) {
@@ -28,8 +31,11 @@ struct GitHistoryView: View {
                     .contentShape(Rectangle())
                     .onTapGesture {
                         selectedCommit = commit
+                        Task {
+                            await viewModel.loadDiff(for: commit)
+                        }
                     }
-                    .background(selectedCommit?.id == commit.id ? Color.blue.opacity(0.1) : Color.clear)
+                    .listRowBackground(selectedCommit?.id == commit.id ? Color.accentColor.opacity(0.12) : Color.clear)
             }
             .listStyle(.plain)
             
@@ -41,6 +47,7 @@ struct GitHistoryView: View {
         }
         .frame(minWidth: 300)
         .task {
+            viewModel.setup(gitService: gitService, containerName: containerName)
             await viewModel.loadHistory()
         }
     }
@@ -120,7 +127,7 @@ struct CommitDetailView: View {
             Divider()
             
             // Diff view
-            ScrollView {
+            ScrollView([.vertical, .horizontal]) {
                 if diff.isEmpty {
                     Text("No changes to display")
                         .foregroundColor(.secondary)
@@ -128,6 +135,9 @@ struct CommitDetailView: View {
                 } else {
                     Text(diff)
                         .font(.system(.caption, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .textSelection(.enabled)
                         .padding()
                 }
             }
@@ -172,7 +182,7 @@ class GitHistoryViewModel: ObservableObject {
         }
         
         do {
-            diff = try gitService.diff(in: containerName)
+            diff = try gitService.show(commit: commit.id, in: containerName)
         } catch {
             diff = "Failed to load diff: \(error.localizedDescription)"
         }
@@ -180,6 +190,9 @@ class GitHistoryViewModel: ObservableObject {
 }
 
 #Preview {
-    GitHistoryView()
+    GitHistoryView(
+        gitService: GitService(runner: DockerService()),
+        containerName: "preview"
+    )
         .frame(width: 400, height: 600)
 }

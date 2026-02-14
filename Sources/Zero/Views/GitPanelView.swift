@@ -1,35 +1,47 @@
 import SwiftUI
 
 struct GitPanelView: View {
-    @StateObject private var gitService = GitPanelService()
+    @StateObject private var panelService = GitPanelService()
+
+    let gitService: GitService
+    let containerName: String
+
     @State private var commitMessage = ""
     @State private var selectedFiles: Set<String> = []
+    @State private var previewedPath: String?
     @State private var showingNewBranchAlert = false
     @State private var newBranchName = ""
-    
+
     var body: some View {
         VStack(spacing: 0) {
-            // Branch Selector
             branchSection
-            
+
             Divider()
-            
-            // Changes List
+
             changesSection
-            
+
             Divider()
-            
-            // Commit Section
+
             commitSection
+
+            if let errorMessage = panelService.errorMessage, !errorMessage.isEmpty {
+                Divider()
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.red.opacity(0.08))
+            }
         }
-        .background(Color(NSColor.windowBackgroundColor))
+        .background(Color(nsColor: .windowBackgroundColor))
         .task {
-            await gitService.refresh()
+            panelService.setup(gitService: gitService, containerName: containerName)
+            await panelService.refresh()
         }
     }
-    
-    // MARK: - Branch Section
-    
+
     private var branchSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -38,17 +50,31 @@ struct GitPanelView: View {
                 Text("Branch")
                     .font(.headline)
                 Spacer()
-                Button(action: { showingNewBranchAlert = true }) {
+
+                Button {
+                    Task { await panelService.refresh() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .help("Refresh status")
+                .accessibilityLabel("Refresh git status")
+
+                Button {
+                    showingNewBranchAlert = true
+                } label: {
                     Image(systemName: "plus")
                 }
                 .buttonStyle(.borderless)
+                .help("Create branch")
+                .accessibilityLabel("Create new branch")
             }
-            
+
             Menu {
-                ForEach(gitService.branches) { branch in
-                    Button(action: {
-                        Task { await gitService.checkout(branch: branch.name) }
-                    }) {
+                ForEach(panelService.branches) { branch in
+                    Button {
+                        Task { await panelService.checkout(branch: branch.name) }
+                    } label: {
                         HStack {
                             Text(branch.name)
                             if branch.isCurrent {
@@ -59,7 +85,7 @@ struct GitPanelView: View {
                 }
             } label: {
                 HStack {
-                    Text(gitService.currentBranch)
+                    Text(panelService.currentBranch)
                         .font(.system(.body, design: .monospaced))
                     Spacer()
                     Image(systemName: "chevron.down")
@@ -68,19 +94,19 @@ struct GitPanelView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color(NSColor.controlBackgroundColor))
+                .background(Color(nsColor: .controlBackgroundColor))
                 .cornerRadius(8)
             }
 
-            if gitService.status.ahead > 0 || gitService.status.behind > 0 {
+            if panelService.status.ahead > 0 || panelService.status.behind > 0 {
                 HStack(spacing: 16) {
-                    if gitService.status.ahead > 0 {
-                        Label("\(gitService.status.ahead) ahead", systemImage: "arrow.up")
+                    if panelService.status.ahead > 0 {
+                        Label("\(panelService.status.ahead) ahead", systemImage: "arrow.up")
                             .font(.caption)
                             .foregroundColor(.orange)
                     }
-                    if gitService.status.behind > 0 {
-                        Label("\(gitService.status.behind) behind", systemImage: "arrow.down")
+                    if panelService.status.behind > 0 {
+                        Label("\(panelService.status.behind) behind", systemImage: "arrow.down")
                             .font(.caption)
                             .foregroundColor(.blue)
                     }
@@ -92,16 +118,17 @@ struct GitPanelView: View {
             TextField("Branch name", text: $newBranchName)
             Button("Cancel", role: .cancel) { }
             Button("Create") {
+                let branchName = newBranchName.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !branchName.isEmpty else { return }
+
                 Task {
-                    await gitService.createBranch(name: newBranchName)
+                    await panelService.createBranch(name: branchName)
                     newBranchName = ""
                 }
             }
         }
     }
-    
-    // MARK: - Changes Section
-    
+
     private var changesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -112,68 +139,97 @@ struct GitPanelView: View {
                 Spacer()
                 if !selectedFiles.isEmpty {
                     Button("Stage \(selectedFiles.count)") {
-                        Task { await gitService.stage(files: Array(selectedFiles)) }
+                        let files = Array(selectedFiles)
+                        Task { await panelService.stage(files: files) }
                         selectedFiles.removeAll()
                     }
                     .buttonStyle(.borderless)
                 }
             }
-            
+
             ScrollView {
                 VStack(spacing: 8) {
-                    // Staged Changes
-                    if !gitService.status.staged.isEmpty {
-                        SectionHeader(title: "Staged", count: gitService.status.staged.count, color: .green)
-                        ForEach(gitService.status.staged) { file in
+                    if !panelService.status.staged.isEmpty {
+                        SectionHeader(title: "Staged", count: panelService.status.staged.count, color: .green)
+                        ForEach(panelService.status.staged) { file in
                             FileRow(
                                 path: file.path,
                                 changeType: file.changeType,
-                                isSelected: false
+                                isSelected: false,
+                                isPreviewed: previewedPath == file.path,
+                                showSelectionIndicator: false
                             )
+                            .onTapGesture {
+                                previewedPath = file.path
+                                Task { await panelService.loadDiff(for: file.path, staged: true) }
+                            }
                         }
                     }
-                    
-                    // Unstaged Changes
-                    if !gitService.status.unstaged.isEmpty {
-                        SectionHeader(title: "Modified", count: gitService.status.unstaged.count, color: .orange)
-                        ForEach(gitService.status.unstaged) { file in
+
+                    if !panelService.status.unstaged.isEmpty {
+                        SectionHeader(title: "Modified", count: panelService.status.unstaged.count, color: .orange)
+                        ForEach(panelService.status.unstaged) { file in
                             FileRow(
                                 path: file.path,
                                 changeType: file.changeType,
-                                isSelected: selectedFiles.contains(file.path)
+                                isSelected: selectedFiles.contains(file.path),
+                                isPreviewed: previewedPath == file.path,
+                                showSelectionIndicator: true
                             )
                             .onTapGesture {
                                 toggleSelection(file.path)
+                                previewedPath = file.path
+                                Task { await panelService.loadDiff(for: file.path, staged: false) }
                             }
                         }
                     }
-                    
-                    // Untracked Files
-                    if !gitService.status.untracked.isEmpty {
-                        SectionHeader(title: "Untracked", count: gitService.status.untracked.count, color: .gray)
-                        ForEach(gitService.status.untracked, id: \.self) { path in
+
+                    if !panelService.status.untracked.isEmpty {
+                        SectionHeader(title: "Untracked", count: panelService.status.untracked.count, color: .gray)
+                        ForEach(panelService.status.untracked, id: \.self) { path in
                             FileRow(
                                 path: path,
                                 changeType: .added,
-                                isSelected: selectedFiles.contains(path)
+                                isSelected: selectedFiles.contains(path),
+                                isPreviewed: previewedPath == path,
+                                showSelectionIndicator: true
                             )
                             .onTapGesture {
                                 toggleSelection(path)
+                                previewedPath = path
+                                panelService.showUntrackedDiffPlaceholder(for: path)
                             }
                         }
                     }
-                    
-                    if gitService.status.staged.isEmpty && 
-                       gitService.status.unstaged.isEmpty && 
-                       gitService.status.untracked.isEmpty {
+
+                    if panelService.status.staged.isEmpty &&
+                        panelService.status.unstaged.isEmpty &&
+                        panelService.status.untracked.isEmpty {
                         EmptyStateView()
                     }
                 }
             }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(panelService.selectedDiffTitle ?? "Diff Preview")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                ScrollView([.vertical, .horizontal]) {
+                    Text(panelService.selectedDiff.isEmpty ? "Select a changed file to preview diff." : panelService.selectedDiff)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                        .padding(8)
+                }
+                .frame(minHeight: 120, maxHeight: 180)
+                .background(Color(nsColor: .textBackgroundColor))
+                .cornerRadius(8)
+            }
         }
         .padding()
     }
-    
+
     private func toggleSelection(_ path: String) {
         if selectedFiles.contains(path) {
             selectedFiles.remove(path)
@@ -181,16 +237,14 @@ struct GitPanelView: View {
             selectedFiles.insert(path)
         }
     }
-    
-    // MARK: - Commit Section
-    
+
     private var commitSection: some View {
         VStack(spacing: 12) {
             TextEditor(text: $commitMessage)
                 .font(.system(.body, design: .monospaced))
                 .frame(height: 60)
                 .padding(8)
-                .background(Color(NSColor.textBackgroundColor))
+                .background(Color(nsColor: .textBackgroundColor))
                 .cornerRadius(8)
                 .overlay(
                     Group {
@@ -203,58 +257,60 @@ struct GitPanelView: View {
                     },
                     alignment: .topLeading
                 )
-            
+
             HStack(spacing: 12) {
                 Button("Commit") {
                     Task { await commit() }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(commitMessage.isEmpty || gitService.status.staged.isEmpty)
-                
+                .disabled(commitMessage.isEmpty || panelService.status.staged.isEmpty)
+
                 Button("Commit All") {
                     Task { await commitAll() }
                 }
                 .buttonStyle(.bordered)
                 .disabled(commitMessage.isEmpty)
-                
+
                 Spacer()
-                
+
                 Button {
-                    Task { await gitService.pull() }
+                    Task { await panelService.pull() }
                 } label: {
                     Image(systemName: "arrow.down.circle")
                 }
                 .buttonStyle(.borderless)
-                
+                .help("Pull from remote")
+                .accessibilityLabel("Pull from remote")
+
                 Button {
-                    Task { await gitService.push() }
+                    Task { await panelService.push() }
                 } label: {
                     Image(systemName: "arrow.up.circle")
                 }
                 .buttonStyle(.borderless)
+                .help("Push to remote")
+                .accessibilityLabel("Push to remote")
             }
         }
         .padding()
     }
-    
+
     private func commit() async {
-        await gitService.commit(message: commitMessage)
+        await panelService.commit(message: commitMessage)
         commitMessage = ""
     }
-    
+
     private func commitAll() async {
-        await gitService.commitAll(message: commitMessage)
+        await panelService.commitAll(message: commitMessage)
         commitMessage = ""
     }
 }
-
-// MARK: - Supporting Views
 
 struct SectionHeader: View {
     let title: String
     let count: Int
     let color: Color
-    
+
     var body: some View {
         HStack {
             Text(title)
@@ -277,35 +333,46 @@ struct FileRow: View {
     let path: String
     let changeType: GitFileChange.ChangeType
     let isSelected: Bool
-    
+    let isPreviewed: Bool
+    let showSelectionIndicator: Bool
+
     var body: some View {
         HStack(spacing: 8) {
-            // Selection indicator
-            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .foregroundColor(isSelected ? .blue : .secondary)
-                .imageScale(.small)
-            
-            // Change type badge
+            if showSelectionIndicator {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundColor(isSelected ? .blue : .secondary)
+                    .imageScale(.small)
+            } else {
+                Image(systemName: isPreviewed ? "eye.fill" : "eye")
+                    .foregroundColor(isPreviewed ? .accentColor : .secondary)
+                    .imageScale(.small)
+            }
+
             Text(changeTypeIcon)
                 .font(.caption)
                 .fontWeight(.bold)
                 .foregroundColor(changeTypeColor)
                 .frame(width: 20)
-            
-            // File path
+
             Text(path)
                 .font(.system(.caption, design: .monospaced))
                 .lineLimit(1)
                 .truncationMode(.middle)
-            
+
             Spacer()
+
+            if isPreviewed {
+                Image(systemName: "eye.fill")
+                    .font(.caption2)
+                    .foregroundColor(.accentColor)
+            }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .background(isSelected ? Color.blue.opacity(0.1) : Color.clear)
+        .background((isSelected || isPreviewed) ? Color.accentColor.opacity(0.12) : Color.clear)
         .cornerRadius(6)
     }
-    
+
     private var changeTypeIcon: String {
         switch changeType {
         case .added: return "A"
@@ -315,7 +382,7 @@ struct FileRow: View {
         case .copied: return "C"
         }
     }
-    
+
     private var changeTypeColor: Color {
         switch changeType {
         case .added: return .green
@@ -342,6 +409,9 @@ struct EmptyStateView: View {
 }
 
 #Preview {
-    GitPanelView()
-        .frame(width: 300, height: 600)
+    GitPanelView(
+        gitService: GitService(runner: DockerService()),
+        containerName: "preview"
+    )
+    .frame(width: 300, height: 600)
 }
