@@ -51,8 +51,13 @@ class FileBasedRunProfileService: RunProfileService {
             return [:]
         }
 
+        if let rawText = String(data: data, encoding: .utf8),
+           rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return [:]
+        }
+
         guard let store = try? JSONDecoder().decode(RunProfileStore.self, from: data) else {
-            throw RunProfileServiceError.decodingFailed
+            return [:]
         }
 
         return store.commandsByRepository
@@ -74,7 +79,7 @@ class FileBasedRunProfileService: RunProfileService {
             withIntermediateDirectories: true
         )
 
-        try data.write(to: url)
+        try data.write(to: url, options: [.atomic])
     }
 
     private func repositoryKey(for repositoryURL: URL) -> String {
