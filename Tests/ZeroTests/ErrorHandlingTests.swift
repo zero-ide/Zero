@@ -128,6 +128,14 @@ class MockCommandRunning: CommandRunning {
         return mockOutput
     }
 
+    func executeStreaming(command: String, arguments: [String], onOutput: @escaping (String) -> Void) throws -> String {
+        if let error = mockError {
+            throw error
+        }
+        onOutput(mockOutput)
+        return mockOutput
+    }
+
     func cancelCurrentCommand() {}
 }
 
@@ -156,6 +164,14 @@ class MockDockerServiceProtocol: DockerServiceProtocol {
         if shouldFail {
             throw NSError(domain: "Docker", code: 1, userInfo: [NSLocalizedDescriptionKey: "Execution failed"])
         }
+        return "output"
+    }
+
+    func executeShellStreaming(container: String, script: String, onOutput: @escaping (String) -> Void) throws -> String {
+        if shouldFail {
+            throw NSError(domain: "Docker", code: 1, userInfo: [NSLocalizedDescriptionKey: "Execution failed"])
+        }
+        onOutput("output")
         return "output"
     }
     
