@@ -4,11 +4,16 @@ import XCTest
 final class ExecutionServiceTests: XCTestCase {
     var service: ExecutionService!
     var mockDocker: MockExecutionDockerService!
+    var mockRunProfileService: MockRunProfileService!
     
     override func setUp() {
         super.setUp()
         mockDocker = MockExecutionDockerService()
-        service = ExecutionService(dockerService: mockDocker)
+        mockRunProfileService = MockRunProfileService()
+        service = ExecutionService(
+            dockerService: mockDocker,
+            runProfileService: mockRunProfileService
+        )
     }
     
     func testInitialization() {
@@ -36,6 +41,31 @@ final class ExecutionServiceTests: XCTestCase {
         
         // Then
         XCTAssertEqual(command, "npm start")
+    }
+
+    func testDetectRunCommand_UsesSavedRunProfileBeforeAutoDetection() async throws {
+        // Given
+        let repositoryURL = URL(string: "https://github.com/zero-ide/Zero.git")!
+        mockRunProfileService.commands[repositoryURL.absoluteString] = "swift run --configuration release"
+        mockDocker.fileExistenceResults = ["Package.swift": true]
+
+        // When
+        let command = try await service.detectRunCommand(container: "test-container", repositoryURL: repositoryURL)
+
+        // Then
+        XCTAssertEqual(command, "swift run --configuration release")
+    }
+
+    func testDetectRunCommand_FallsBackToAutoDetectionWhenNoSavedRunProfile() async throws {
+        // Given
+        let repositoryURL = URL(string: "https://github.com/zero-ide/Zero.git")!
+        mockDocker.fileExistenceResults = ["Package.swift": true]
+
+        // When
+        let command = try await service.detectRunCommand(container: "test-container", repositoryURL: repositoryURL)
+
+        // Then
+        XCTAssertEqual(command, "swift run")
     }
 
     func testDetectRunCommand_DockerfileTakesPriorityOverSwift() async throws {
@@ -171,6 +201,47 @@ final class ExecutionServiceTests: XCTestCase {
         await runTask.value
         XCTAssertTrue(service.output.contains("second chunk"))
         XCTAssertEqual(service.status, .success)
+    }
+
+    func testSaveAndLoadRunProfileCommand() throws {
+        // Given
+        let repositoryURL = URL(string: "https://github.com/zero-ide/Zero.git")!
+
+        // When
+        try service.saveRunProfileCommand("npm run dev", for: repositoryURL)
+        let loadedCommand = try service.loadRunProfileCommand(for: repositoryURL)
+
+        // Then
+        XCTAssertEqual(loadedCommand, "npm run dev")
+    }
+
+    func testClearRunProfileCommand() throws {
+        // Given
+        let repositoryURL = URL(string: "https://github.com/zero-ide/Zero.git")!
+        try service.saveRunProfileCommand("npm run dev", for: repositoryURL)
+
+        // When
+        try service.clearRunProfile(for: repositoryURL)
+        let loadedCommand = try service.loadRunProfileCommand(for: repositoryURL)
+
+        // Then
+        XCTAssertNil(loadedCommand)
+    }
+}
+
+class MockRunProfileService: RunProfileService {
+    var commands: [String: String] = [:]
+
+    func save(command: String, for repositoryURL: URL) throws {
+        commands[repositoryURL.absoluteString] = command
+    }
+
+    func loadCommand(for repositoryURL: URL) throws -> String? {
+        commands[repositoryURL.absoluteString]
+    }
+
+    func removeCommand(for repositoryURL: URL) throws {
+        commands.removeValue(forKey: repositoryURL.absoluteString)
     }
 }
 

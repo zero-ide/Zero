@@ -11,13 +11,19 @@ enum ExecutionStatus: Equatable {
 class ExecutionService: ObservableObject {
     let dockerService: DockerServiceProtocol
     let buildConfigService: BuildConfigurationService
+    let runProfileService: RunProfileService
     @Published var status: ExecutionStatus = .idle
     @Published var output: String = ""
     private var cancellationRequested = false
     
-    init(dockerService: DockerServiceProtocol, buildConfigService: BuildConfigurationService = FileBasedBuildConfigurationService()) {
+    init(
+        dockerService: DockerServiceProtocol,
+        buildConfigService: BuildConfigurationService = FileBasedBuildConfigurationService(),
+        runProfileService: RunProfileService = FileBasedRunProfileService()
+    ) {
         self.dockerService = dockerService
         self.buildConfigService = buildConfigService
+        self.runProfileService = runProfileService
     }
     
     func run(container: String, command: String) async {
@@ -103,7 +109,13 @@ class ExecutionService: ObservableObject {
         return try dockerService.runContainer(image: jdkImage, name: name)
     }
     
-    func detectRunCommand(container: String) async throws -> String {
+    func detectRunCommand(container: String, repositoryURL: URL? = nil) async throws -> String {
+        if let repositoryURL,
+           let savedCommand = try? runProfileService.loadCommand(for: repositoryURL),
+           let normalizedSavedCommand = normalizeCommand(savedCommand) {
+            return normalizedSavedCommand
+        }
+
         let config = try buildConfigService.load()
 
         if try dockerService.fileExists(container: container, path: "Dockerfile") {
@@ -159,6 +171,24 @@ class ExecutionService: ObservableObject {
         throw NSError(domain: "ExecutionService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Cannot detect project type"])
     }
 
+    func saveRunProfileCommand(_ command: String, for repositoryURL: URL) throws {
+        let normalizedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedCommand.isEmpty {
+            try runProfileService.removeCommand(for: repositoryURL)
+            return
+        }
+
+        try runProfileService.save(command: normalizedCommand, for: repositoryURL)
+    }
+
+    func loadRunProfileCommand(for repositoryURL: URL) throws -> String? {
+        try runProfileService.loadCommand(for: repositoryURL)
+    }
+
+    func clearRunProfile(for repositoryURL: URL) throws {
+        try runProfileService.removeCommand(for: repositoryURL)
+    }
+
     private func canUseDockerfileStrategy(container: String) -> Bool {
         guard let output = try? dockerService.executeShell(
             container: container,
@@ -168,6 +198,15 @@ class ExecutionService: ObservableObject {
         }
 
         return output.contains("yes")
+    }
+
+    private func normalizeCommand(_ command: String?) -> String? {
+        guard let command else {
+            return nil
+        }
+
+        let trimmedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedCommand.isEmpty ? nil : trimmedCommand
     }
     
     /// Spring Boot 프로젝트 여부 확인
