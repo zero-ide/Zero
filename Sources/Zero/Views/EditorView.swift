@@ -18,6 +18,9 @@ struct EditorView: View {
     @State private var isRecoveringLSP: Bool = false
     @State private var terminalHeight: CGFloat = 180
     @State private var terminalDragStartHeight: CGFloat = 180
+    @State private var showRunProfileEditor: Bool = false
+    @State private var runProfileDraftCommand: String = ""
+    @State private var runProfileErrorMessage: String = ""
     
     @EnvironmentObject var appState: AppState
     
@@ -220,6 +223,10 @@ struct EditorView: View {
                     Label("Stop", systemImage: "stop.fill")
                 }
                 .disabled(appState.executionService.status != .running)
+
+                Button(action: openRunProfileEditor) {
+                    Label("Run Profile", systemImage: "slider.horizontal.3")
+                }
                 
                 Button(action: saveFile) {
                     if isSaving {
@@ -253,6 +260,51 @@ struct EditorView: View {
         .sheet(isPresented: $showGitPanel) {
             GitPanelSheet(session: session)
         }
+        .sheet(isPresented: $showRunProfileEditor) {
+            NavigationStack {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Run Profile")
+                        .font(.title3)
+                        .fontWeight(.semibold)
+
+                    Text("Set a custom run command for this repository. Leave empty to keep automatic detection.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    TextField("e.g. npm run dev", text: $runProfileDraftCommand, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(1...3)
+
+                    if !runProfileErrorMessage.isEmpty {
+                        Text(runProfileErrorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+
+                    Spacer()
+
+                    HStack {
+                        Button("Reset to Auto-Detect", role: .destructive) {
+                            clearRunProfile()
+                        }
+
+                        Spacer()
+
+                        Button("Cancel") {
+                            showRunProfileEditor = false
+                        }
+
+                        Button("Save") {
+                            saveRunProfile()
+                        }
+                        .keyboardShortcut(.defaultAction)
+                    }
+                }
+                .padding(20)
+                .navigationTitle("Run Settings")
+            }
+            .frame(minWidth: 480, minHeight: 260)
+        }
     }
     
     // MARK: - Helpers
@@ -269,7 +321,10 @@ struct EditorView: View {
             
             do {
                 // 1. 프로젝트 타입 감지
-                let command = try await appState.executionService.detectRunCommand(container: session.containerName)
+                let command = try await appState.executionService.detectRunCommand(
+                    container: session.containerName,
+                    repositoryURL: session.repoURL
+                )
                 
                 await MainActor.run {
                     appState.executionService.output += "\n✅ Detected: \(command)\n🚀 Running...\n"
@@ -288,6 +343,38 @@ struct EditorView: View {
 
     private func stopCode() {
         appState.executionService.stopRunning()
+    }
+
+    private func openRunProfileEditor() {
+        runProfileErrorMessage = ""
+
+        do {
+            runProfileDraftCommand = try appState.executionService.loadRunProfileCommand(for: session.repoURL) ?? ""
+        } catch {
+            runProfileDraftCommand = ""
+            runProfileErrorMessage = "Failed to load run profile."
+        }
+
+        showRunProfileEditor = true
+    }
+
+    private func saveRunProfile() {
+        do {
+            try appState.executionService.saveRunProfileCommand(runProfileDraftCommand, for: session.repoURL)
+            showRunProfileEditor = false
+        } catch {
+            runProfileErrorMessage = "Failed to save run profile."
+        }
+    }
+
+    private func clearRunProfile() {
+        do {
+            try appState.executionService.clearRunProfile(for: session.repoURL)
+            runProfileDraftCommand = ""
+            showRunProfileEditor = false
+        } catch {
+            runProfileErrorMessage = "Failed to reset run profile."
+        }
     }
     
     private func loadFile(_ file: FileItem) {
