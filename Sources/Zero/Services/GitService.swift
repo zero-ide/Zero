@@ -60,6 +60,130 @@ struct GitService {
     init(runner: ContainerRunning) {
         self.runner = runner
     }
+
+    private func shellQuote(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\"'\"'"))'"
+    }
+
+    private func firstMatchInt(in text: String, pattern: String) -> Int {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return 0 }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, range: range), match.numberOfRanges > 1 else { return 0 }
+        let capture = match.range(at: 1)
+        guard let captureRange = Range(capture, in: text) else { return 0 }
+        return Int(text[captureRange]) ?? 0
+    }
+
+    private func decodePorcelainPathComponent(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count >= 2, trimmed.hasPrefix("\""), trimmed.hasSuffix("\"") else {
+            return trimmed
+        }
+
+        let inner = String(trimmed.dropFirst().dropLast())
+        var decodedBytes: [UInt8] = []
+        var index = inner.startIndex
+
+        while index < inner.endIndex {
+            let character = inner[index]
+
+            if character != "\\" {
+                decodedBytes.append(contentsOf: String(character).utf8)
+                index = inner.index(after: index)
+                continue
+            }
+
+            let escapeIndex = inner.index(after: index)
+            guard escapeIndex < inner.endIndex else {
+                decodedBytes.append(UInt8(ascii: "\\"))
+                break
+            }
+
+            let escape = inner[escapeIndex]
+
+            if ("0"..."7").contains(escape) {
+                var octalDigits = String(escape)
+                var digitIndex = inner.index(after: escapeIndex)
+
+                while digitIndex < inner.endIndex && octalDigits.count < 3 {
+                    let next = inner[digitIndex]
+                    guard ("0"..."7").contains(next) else { break }
+                    octalDigits.append(next)
+                    digitIndex = inner.index(after: digitIndex)
+                }
+
+                if let byte = UInt8(octalDigits, radix: 8) {
+                    decodedBytes.append(byte)
+                }
+
+                index = digitIndex
+                continue
+            }
+
+            switch escape {
+            case "\\": decodedBytes.append(UInt8(ascii: "\\"))
+            case "\"": decodedBytes.append(UInt8(ascii: "\""))
+            case "n": decodedBytes.append(UInt8(ascii: "\n"))
+            case "r": decodedBytes.append(UInt8(ascii: "\r"))
+            case "t": decodedBytes.append(UInt8(ascii: "\t"))
+            default:
+                decodedBytes.append(UInt8(ascii: "\\"))
+                decodedBytes.append(contentsOf: String(escape).utf8)
+            }
+            index = inner.index(after: escapeIndex)
+        }
+
+        return String(bytes: decodedBytes, encoding: .utf8) ?? String(decoding: decodedBytes, as: UTF8.self)
+    }
+
+    private func splitRenameComponents(_ value: String) -> (String, String)? {
+        var index = value.startIndex
+        var inQuotes = false
+        var isEscaped = false
+
+        while index < value.endIndex {
+            let character = value[index]
+
+            if isEscaped {
+                isEscaped = false
+                index = value.index(after: index)
+                continue
+            }
+
+            if character == "\\" {
+                isEscaped = true
+                index = value.index(after: index)
+                continue
+            }
+
+            if character == "\"" {
+                inQuotes.toggle()
+                index = value.index(after: index)
+                continue
+            }
+
+            if !inQuotes, value[index...].hasPrefix(" -> ") {
+                let left = String(value[..<index])
+                let rightStart = value.index(index, offsetBy: 4)
+                let right = String(value[rightStart...])
+                return (left, right)
+            }
+
+            index = value.index(after: index)
+        }
+
+        return nil
+    }
+
+    private func normalizePorcelainPath(_ rawPath: String, isRenameOrCopy: Bool) -> String {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespaces)
+        guard isRenameOrCopy else {
+            return decodePorcelainPathComponent(trimmed)
+        }
+
+        let destination = splitRenameComponents(trimmed)?.1 ?? trimmed
+        return decodePorcelainPathComponent(destination)
+    }
     
     // MARK: - Clone
     
@@ -75,7 +199,7 @@ struct GitService {
             throw ZeroError.invalidRepositoryURL
         }
         
-        let command = "mkdir -p /workspace && cd /workspace && git clone \(authenticatedURL) ."
+        let command = "mkdir -p /workspace && cd /workspace && git clone \(shellQuote(authenticatedURL)) ."
         
         do {
             _ = try runner.executeShell(container: containerName, script: command)
@@ -107,47 +231,32 @@ struct GitService {
             if line.hasPrefix("## ") {
                 // Parse branch info
                 let branchInfo = String(line.dropFirst(3))
-                if let branchEnd = branchInfo.range(of: "...")?.lowerBound {
-                    branch = String(branchInfo[..<branchEnd])
-                } else if let spaceIndex = branchInfo.firstIndex(of: " ") {
-                    branch = String(branchInfo[..<spaceIndex])
+                let branchSection = branchInfo.components(separatedBy: " [").first ?? branchInfo
+                if let branchEnd = branchSection.range(of: "...")?.lowerBound {
+                    branch = String(branchSection[..<branchEnd])
                 } else {
-                    branch = branchInfo
+                    branch = branchSection
                 }
-                
-                // Parse ahead/behind
-                if branchInfo.contains("[ahead ") {
-                    if let start = branchInfo.range(of: "[ahead ")?.upperBound,
-                       let end = branchInfo[start...].firstIndex(of: "]") {
-                        let aheadStr = String(branchInfo[start..<end])
-                        ahead = Int(aheadStr) ?? 0
-                    }
-                }
-                if branchInfo.contains("[behind ") {
-                    if let start = branchInfo.range(of: "[behind ")?.upperBound,
-                       let end = branchInfo[start...].firstIndex(of: "]") {
-                        let behindStr = String(branchInfo[start..<end])
-                        behind = Int(behindStr) ?? 0
-                    }
-                }
+
+                ahead = firstMatchInt(in: branchInfo, pattern: "ahead\\s+(\\d+)")
+                behind = firstMatchInt(in: branchInfo, pattern: "behind\\s+(\\d+)")
             } else if line.count >= 2 {
                 let indexStatus = line.prefix(1)
                 let workTreeStatus = line.dropFirst().prefix(1)
-                let filePath = String(line.dropFirst(3))
-                
-                if indexStatus != " " && indexStatus != "?" {
-                    // Staged changes
-                    if let type = GitFileChange.ChangeType(rawValue: String(indexStatus)) {
-                        staged.append(GitFileChange(path: filePath, changeType: type))
-                    }
-                } else if workTreeStatus != " " {
-                    // Unstaged changes
-                    if let type = GitFileChange.ChangeType(rawValue: String(workTreeStatus)) {
-                        unstaged.append(GitFileChange(path: filePath, changeType: type))
-                    }
-                } else if indexStatus == "?" {
+                let isRenameOrCopy = indexStatus == "R" || indexStatus == "C" || workTreeStatus == "R" || workTreeStatus == "C"
+                let filePath = normalizePorcelainPath(String(line.dropFirst(3)), isRenameOrCopy: isRenameOrCopy)
+
+                if indexStatus == "?" && workTreeStatus == "?" {
                     // Untracked
                     untracked.append(filePath)
+                } else {
+                    if indexStatus != " ", let type = GitFileChange.ChangeType(rawValue: String(indexStatus)) {
+                        staged.append(GitFileChange(path: filePath, changeType: type))
+                    }
+
+                    if workTreeStatus != " ", let type = GitFileChange.ChangeType(rawValue: String(workTreeStatus)) {
+                        unstaged.append(GitFileChange(path: filePath, changeType: type))
+                    }
                 }
             }
         }
@@ -165,8 +274,9 @@ struct GitService {
     // MARK: - Add
     
     func add(files: [String], in containerName: String) throws {
-        let fileList = files.joined(separator: " ")
-        let command = "cd /workspace && git add \(fileList)"
+        guard !files.isEmpty else { return }
+        let fileList = files.map(shellQuote).joined(separator: " ")
+        let command = "cd /workspace && git add -- \(fileList)"
         _ = try runner.executeShell(container: containerName, script: command)
     }
     
@@ -178,9 +288,7 @@ struct GitService {
     // MARK: - Commit
     
     func commit(message: String, in containerName: String) throws {
-        // Escape quotes in message
-        let escapedMessage = message.replacingOccurrences(of: "\"", with: "\\\"")
-        let command = "cd /workspace && git commit -m \"\(escapedMessage)\""
+        let command = "cd /workspace && git commit -m \(shellQuote(message))"
         _ = try runner.executeShell(container: containerName, script: command)
     }
     
@@ -264,30 +372,30 @@ struct GitService {
     }
     
     func createBranch(name: String, in containerName: String) throws {
-        let command = "cd /workspace && git branch \(name)"
+        let command = "cd /workspace && git branch \(shellQuote(name))"
         _ = try runner.executeShell(container: containerName, script: command)
     }
     
     func checkout(branch: String, in containerName: String) throws {
-        let command = "cd /workspace && git checkout \(branch)"
+        let command = "cd /workspace && git checkout \(shellQuote(branch))"
         _ = try runner.executeShell(container: containerName, script: command)
     }
     
     func createAndCheckoutBranch(name: String, in containerName: String) throws {
-        let command = "cd /workspace && git checkout -b \(name)"
+        let command = "cd /workspace && git checkout -b \(shellQuote(name))"
         _ = try runner.executeShell(container: containerName, script: command)
     }
     
     func deleteBranch(name: String, force: Bool = false, in containerName: String) throws {
         let flag = force ? "-D" : "-d"
-        let command = "cd /workspace && git branch \(flag) \(name)"
+        let command = "cd /workspace && git branch \(flag) \(shellQuote(name))"
         _ = try runner.executeShell(container: containerName, script: command)
     }
     
     // MARK: - Push/Pull
     
     func push(branch: String? = nil, in containerName: String) throws {
-        let branchArg = branch ?? ""
+        let branchArg = branch.map { shellQuote($0) } ?? ""
         let command = "cd /workspace && git push origin \(branchArg)"
         _ = try runner.executeShell(container: containerName, script: command)
     }
@@ -301,12 +409,22 @@ struct GitService {
     
     func diff(file: String? = nil, in containerName: String) throws -> String {
         let fileArg = file ?? ""
-        let command = "cd /workspace && git diff \(fileArg)"
+        let command = fileArg.isEmpty
+            ? "cd /workspace && git diff"
+            : "cd /workspace && git diff -- \(shellQuote(fileArg))"
         return try runner.executeShell(container: containerName, script: command)
     }
     
-    func diffStaged(in containerName: String) throws -> String {
-        let command = "cd /workspace && git diff --staged"
+    func diffStaged(file: String? = nil, in containerName: String) throws -> String {
+        let fileArg = file ?? ""
+        let command = fileArg.isEmpty
+            ? "cd /workspace && git diff --staged"
+            : "cd /workspace && git diff --staged -- \(shellQuote(fileArg))"
+        return try runner.executeShell(container: containerName, script: command)
+    }
+
+    func show(commit hash: String, in containerName: String) throws -> String {
+        let command = "cd /workspace && git show --stat --patch --pretty=format:'%h %s%nAuthor: %an%nDate: %ar%n' \(shellQuote(hash))"
         return try runner.executeShell(container: containerName, script: command)
     }
     
@@ -315,8 +433,7 @@ struct GitService {
     func stash(message: String? = nil, in containerName: String) throws {
         let command: String
         if let message = message {
-            let escapedMessage = message.replacingOccurrences(of: "\"", with: "\\\"")
-            command = "cd /workspace && git stash push -m \"\(escapedMessage)\""
+            command = "cd /workspace && git stash push -m \(shellQuote(message))"
         } else {
             command = "cd /workspace && git stash push"
         }
@@ -362,7 +479,7 @@ struct GitService {
     // MARK: - Merge
     
     func merge(branch: String, in containerName: String) throws {
-        let command = "cd /workspace && git merge \(branch)"
+        let command = "cd /workspace && git merge \(shellQuote(branch))"
         _ = try runner.executeShell(container: containerName, script: command)
     }
     
@@ -374,7 +491,7 @@ struct GitService {
     // MARK: - Rebase
     
     func rebase(branch: String, in containerName: String) throws {
-        let command = "cd /workspace && git rebase \(branch)"
+        let command = "cd /workspace && git rebase \(shellQuote(branch))"
         _ = try runner.executeShell(container: containerName, script: command)
     }
     
