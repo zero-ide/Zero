@@ -38,7 +38,7 @@ struct GitHistoryView: View {
 
             if let errorMessage = viewModel.errorMessage, !errorMessage.isEmpty {
                 InlineErrorBanner(message: errorMessage)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal)
                     .padding(.vertical, 8)
             }
             
