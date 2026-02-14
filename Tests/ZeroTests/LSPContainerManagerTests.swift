@@ -3,16 +3,59 @@ import XCTest
 
 @MainActor
 final class LSPContainerManagerTests: XCTestCase {
-    private func makeManager(commandStub: HostCommandStub) -> LSPContainerManager {
+    private func makeManager(
+        commandStub: HostCommandStub,
+        dockerContextPathResolver: ((String) -> String?)? = { _ in "/tmp/zero/docker/lsp-java" }
+    ) -> LSPContainerManager {
         let dockerRunner = DockerInstallationCommandRunner()
         let dockerService = DockerService(runner: dockerRunner)
 
         return LSPContainerManager(
             dockerService: dockerService,
             commandRunner: { try await commandStub.run($0) },
-            dockerContextPathResolver: { _ in "/tmp/zero/docker/lsp-java" },
+            dockerContextPathResolver: dockerContextPathResolver,
             sleep: { _ in }
         )
+    }
+
+    func testStartLSPContainerUsesEnvironmentDockerContextPath() async throws {
+        let runningCheck = "docker ps --filter \"name=^/zero-lsp-java$\" --filter \"status=running\" --format \"{{.Names}}\""
+        let imageCheck = "docker image inspect zero-lsp-java --format '{{.Id}}'"
+        let containerExistsCheck = "docker ps -a --filter \"name=^/zero-lsp-java$\" --format \"{{.Names}}\""
+        let runCommand = "docker run -d --name zero-lsp-java -p 8080:8080 -v /tmp/zero-lsp-workspace:/workspace zero-lsp-java"
+
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("zero-lsp-context-\(UUID().uuidString)", isDirectory: true)
+        let expectedContext = tempRoot.appendingPathComponent("lsp-java", isDirectory: true)
+        try FileManager.default.createDirectory(at: expectedContext, withIntermediateDirectories: true)
+        try "FROM scratch\n".write(to: expectedContext.appendingPathComponent("Dockerfile"), atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let previousValue = ProcessInfo.processInfo.environment["ZERO_LSP_DOCKER_CONTEXT"]
+        setenv("ZERO_LSP_DOCKER_CONTEXT", tempRoot.path, 1)
+        defer {
+            if let previousValue {
+                setenv("ZERO_LSP_DOCKER_CONTEXT", previousValue, 1)
+            } else {
+                unsetenv("ZERO_LSP_DOCKER_CONTEXT")
+            }
+        }
+
+        let commandStub = HostCommandStub(
+            outputs: [
+                runningCheck: ["", "zero-lsp-java\n"],
+                containerExistsCheck: [""],
+                runCommand: ["container-id\n"]
+            ],
+            failingCommands: [imageCheck]
+        )
+
+        let manager = makeManager(commandStub: commandStub, dockerContextPathResolver: nil)
+
+        _ = try await manager.startLSPContainer(language: "java")
+        let executed = await commandStub.executedCommands()
+
+        XCTAssertTrue(executed.contains("docker build -t zero-lsp-java \"\(expectedContext.path)\""))
     }
 
     func testStartLSPContainerUsesSharedRunningContainer() async throws {
@@ -30,6 +73,24 @@ final class LSPContainerManagerTests: XCTestCase {
 
         XCTAssertEqual(name, "zero-lsp-java")
         XCTAssertEqual(executed, [runningCheck])
+    }
+
+    func testEnsureLSPContainerRunningReturnsFalseWhenContextMissing() async {
+        let runningCheck = "docker ps --filter \"name=^/zero-lsp-java$\" --filter \"status=running\" --format \"{{.Names}}\""
+        let imageCheck = "docker image inspect zero-lsp-java --format '{{.Id}}'"
+        let commandStub = HostCommandStub(
+            outputs: [
+                runningCheck: [""]
+            ],
+            failingCommands: [imageCheck]
+        )
+
+        let manager = makeManager(commandStub: commandStub, dockerContextPathResolver: { _ in nil })
+        let isReady = await manager.ensureLSPContainerRunning(language: "java")
+
+        XCTAssertFalse(isReady)
+        XCTAssertEqual(manager.statusMessage, "LSP unavailable")
+        XCTAssertEqual(manager.errorMessage, "LSP Docker 컨텍스트를 찾을 수 없습니다: lsp-java")
     }
 
     func testStartLSPContainerBuildsAndRunsWhenMissing() async throws {
