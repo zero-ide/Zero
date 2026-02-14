@@ -4,49 +4,66 @@ struct GitStashView: View {
     @StateObject private var viewModel = GitStashViewModel()
     @State private var stashMessage = ""
     @State private var showingStashAlert = false
+    @State private var pendingDropStash: GitStash?
+    @State private var pendingPopStash: GitStash?
 
     let gitService: GitService
     let containerName: String
+    var showsHeader: Bool = true
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Image(systemName: "archivebox")
-                    .foregroundColor(.secondary)
-                Text("Stash")
-                    .font(.headline)
-                Spacer()
-                Button {
-                    showingStashAlert = true
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .buttonStyle(.borderless)
-            }
-            .padding()
-            
-            Divider()
-            
-            // Stash List
-            List(viewModel.stashes) { stash in
-                StashRow(stash: stash)
-                    .contextMenu {
-                        Button("Apply") {
-                            Task { await viewModel.applyStash(index: stash.index) }
-                        }
-                        Button("Pop") {
-                            Task { await viewModel.popStash(index: stash.index) }
-                        }
-                        Divider()
-                        Button("Drop", role: .destructive) {
-                            Task { await viewModel.dropStash(index: stash.index) }
-                        }
+            if showsHeader {
+                // Header
+                HStack {
+                    Image(systemName: "archivebox")
+                        .foregroundColor(.secondary)
+                    Text("Stash")
+                        .font(.headline)
+                    Spacer()
+                    if viewModel.isLoading {
+                        ProgressView()
+                            .controlSize(.small)
                     }
+                    Button {
+                        showingStashAlert = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Create stash")
+                    .accessibilityLabel("Create stash")
+                }
+                .padding()
+
+                Divider()
+            } else {
+                HStack {
+                    if viewModel.isLoading {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    Spacer()
+                    Button {
+                        showingStashAlert = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Create stash")
+                    .accessibilityLabel("Create stash")
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
-            .listStyle(.plain)
+
+            if let errorMessage = viewModel.errorMessage, !errorMessage.isEmpty {
+                InlineErrorBanner(message: errorMessage)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+            }
             
-            if viewModel.stashes.isEmpty {
+            if !viewModel.isLoading && viewModel.errorMessage == nil && viewModel.stashes.isEmpty {
                 Spacer()
                 VStack(spacing: 8) {
                     Image(systemName: "archivebox")
@@ -56,6 +73,17 @@ struct GitStashView: View {
                         .foregroundColor(.secondary)
                 }
                 Spacer()
+            } else {
+                // Stash List
+                List(viewModel.stashes) { stash in
+                    StashRow(
+                        stash: stash,
+                        onApply: { Task { await viewModel.applyStash(index: stash.index) } },
+                        onPopRequest: { pendingPopStash = stash },
+                        onDropRequest: { pendingDropStash = stash }
+                    )
+                }
+                .listStyle(.plain)
             }
         }
         .frame(minWidth: 300)
@@ -71,11 +99,52 @@ struct GitStashView: View {
                 stashMessage = ""
             }
         }
+        .alert("Drop Stash?", isPresented: Binding(
+            get: { pendingDropStash != nil },
+            set: { shouldShow in
+                if !shouldShow {
+                    pendingDropStash = nil
+                }
+            }
+        )) {
+            Button("Cancel", role: .cancel) {
+                pendingDropStash = nil
+            }
+            Button("Drop", role: .destructive) {
+                guard let stash = pendingDropStash else { return }
+                Task { await viewModel.dropStash(index: stash.index) }
+                pendingDropStash = nil
+            }
+        } message: {
+            Text("This action removes the stash entry permanently.")
+        }
+        .alert("Pop Stash?", isPresented: Binding(
+            get: { pendingPopStash != nil },
+            set: { shouldShow in
+                if !shouldShow {
+                    pendingPopStash = nil
+                }
+            }
+        )) {
+            Button("Cancel", role: .cancel) {
+                pendingPopStash = nil
+            }
+            Button("Pop", role: .destructive) {
+                guard let stash = pendingPopStash else { return }
+                Task { await viewModel.popStash(index: stash.index) }
+                pendingPopStash = nil
+            }
+        } message: {
+            Text("This applies changes and removes the stash entry.")
+        }
     }
 }
 
 struct StashRow: View {
     let stash: GitStash
+    let onApply: () -> Void
+    let onPopRequest: () -> Void
+    let onDropRequest: () -> Void
     
     var body: some View {
         HStack(spacing: 12) {
@@ -99,6 +168,18 @@ struct StashRow: View {
             }
             
             Spacer()
+
+            Menu {
+                Button("Apply", action: onApply)
+                Button("Pop", role: .destructive, action: onPopRequest)
+                Divider()
+                Button("Drop", role: .destructive, action: onDropRequest)
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .help("Stash actions")
+            .accessibilityLabel("Stash actions")
         }
         .padding(.vertical, 4)
     }
