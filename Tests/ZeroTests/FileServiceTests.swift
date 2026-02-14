@@ -1,0 +1,136 @@
+import XCTest
+@testable import Zero
+
+final class FileServiceTests: XCTestCase {
+    func testCreateFileWritesAtWorkspaceAbsolutePath() async throws {
+        // Given
+        let docker = MockFileOpsDockerService()
+        let service = FileService(containerName: "zero-dev", workspacePath: "/workspace", docker: docker)
+
+        // When
+        try await service.createFile(path: "src/main.swift", initialContent: "print(\"hi\")")
+
+        // Then
+        XCTAssertEqual(docker.writtenFiles.count, 1)
+        XCTAssertEqual(docker.writtenFiles.first?.path, "/workspace/src/main.swift")
+        XCTAssertEqual(docker.writtenFiles.first?.content, "print(\"hi\")")
+    }
+
+    func testCreateDirectoryRejectsPathOutsideWorkspace() async {
+        // Given
+        let docker = MockFileOpsDockerService()
+        let service = FileService(containerName: "zero-dev", workspacePath: "/workspace", docker: docker)
+
+        // When
+        do {
+            try await service.createDirectory(path: "../etc")
+            XCTFail("Expected createDirectory to reject path traversal")
+        } catch {
+            // Then
+            XCTAssertTrue(docker.executedScripts.isEmpty)
+        }
+    }
+
+    func testRenameItemCallsDockerRenameWithWorkspaceAbsolutePaths() async throws {
+        // Given
+        let docker = MockFileOpsDockerService()
+        let service = FileService(containerName: "zero-dev", workspacePath: "/workspace", docker: docker)
+
+        // When
+        try await service.renameItem(at: "src/old.swift", to: "src/new.swift")
+
+        // Then
+        XCTAssertEqual(docker.renameCalls.count, 1)
+        XCTAssertEqual(docker.renameCalls.first?.from, "/workspace/src/old.swift")
+        XCTAssertEqual(docker.renameCalls.first?.to, "/workspace/src/new.swift")
+    }
+
+    func testRenameItemRejectsDestinationOutsideWorkspace() async {
+        // Given
+        let docker = MockFileOpsDockerService()
+        let service = FileService(containerName: "zero-dev", workspacePath: "/workspace", docker: docker)
+
+        // When
+        do {
+            try await service.renameItem(at: "src/old.swift", to: "../new.swift")
+            XCTFail("Expected renameItem to reject destination path traversal")
+        } catch {
+            // Then
+            XCTAssertTrue(docker.renameCalls.isEmpty)
+        }
+    }
+
+    func testDeleteItemUsesRecursiveFlag() async throws {
+        // Given
+        let docker = MockFileOpsDockerService()
+        let service = FileService(containerName: "zero-dev", workspacePath: "/workspace", docker: docker)
+
+        // When
+        try await service.deleteItem(at: "build", recursive: true)
+
+        // Then
+        XCTAssertEqual(docker.removeCalls.count, 1)
+        XCTAssertEqual(docker.removeCalls.first?.path, "/workspace/build")
+        XCTAssertEqual(docker.removeCalls.first?.recursive, true)
+    }
+
+    func testDeleteItemRejectsPathOutsideWorkspace() async {
+        // Given
+        let docker = MockFileOpsDockerService()
+        let service = FileService(containerName: "zero-dev", workspacePath: "/workspace", docker: docker)
+
+        // When
+        do {
+            try await service.deleteItem(at: "../../tmp/outside", recursive: true)
+            XCTFail("Expected deleteItem to reject path traversal")
+        } catch {
+            // Then
+            XCTAssertTrue(docker.removeCalls.isEmpty)
+        }
+    }
+}
+
+private final class MockFileOpsDockerService: DockerServiceProtocol {
+    var executedScripts: [String] = []
+    var renameCalls: [(from: String, to: String)] = []
+    var removeCalls: [(path: String, recursive: Bool)] = []
+    var ensuredDirectories: [String] = []
+    var writtenFiles: [(path: String, content: String)] = []
+
+    func checkInstallation() throws -> Bool { true }
+    func runContainer(image: String, name: String) throws -> String { "" }
+    func executeCommand(container: String, command: String) throws -> String { "" }
+
+    func executeShell(container: String, script: String) throws -> String {
+        executedScripts.append(script)
+        return ""
+    }
+
+    func executeShellStreaming(container: String, script: String, onOutput: @escaping (String) -> Void) throws -> String {
+        executedScripts.append(script)
+        return ""
+    }
+
+    func listFiles(container: String, path: String) throws -> String { "" }
+    func readFile(container: String, path: String) throws -> String { "" }
+    func writeFile(container: String, path: String, content: String) throws {
+        writtenFiles.append((path: path, content: content))
+    }
+
+    func ensureDirectory(container: String, path: String) throws {
+        ensuredDirectories.append(path)
+    }
+
+    func rename(container: String, from: String, to: String) throws {
+        renameCalls.append((from: from, to: to))
+    }
+
+    func remove(container: String, path: String, recursive: Bool) throws {
+        removeCalls.append((path: path, recursive: recursive))
+    }
+
+    func stopContainer(name: String) throws {}
+    func removeContainer(name: String) throws {}
+    func fileExists(container: String, path: String) throws -> Bool { true }
+    func cancelCurrentExecution() {}
+}
