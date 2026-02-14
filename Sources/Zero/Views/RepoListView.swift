@@ -132,8 +132,8 @@ struct RepoListView: View {
                 .foregroundStyle(.secondary)
         }
         .task {
-            await appState.fetchOrganizations()
             await appState.fetchRepositories()
+            await appState.fetchOrganizations()
             appState.loadSessions()
         }
         .overlay {
@@ -202,12 +202,6 @@ struct RepoRow: View {
             .buttonStyle(.bordered)
         }
         .padding(.vertical, 4)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            Task {
-                await onOpen()
-            }
-        }
     }
 }
 
