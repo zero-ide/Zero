@@ -105,14 +105,17 @@ class ExecutionService: ObservableObject {
     
     func detectRunCommand(container: String) async throws -> String {
         let config = try buildConfigService.load()
-        
-        // 순서대로 체크 (우선순위)
-        // 1. Swift
+
+        if try dockerService.fileExists(container: container, path: "Dockerfile") {
+            if canUseDockerfileStrategy(container: container) {
+                return "docker build -t zero-runner . && docker run --rm zero-runner"
+            }
+        }
+
         if try dockerService.fileExists(container: container, path: "Package.swift") {
             return "swift run"
         }
         
-        // 2. Maven (pom.xml)
         if try dockerService.fileExists(container: container, path: "pom.xml") {
             if config.buildTool == .maven {
                 // Spring Boot 플러그인 확인
@@ -124,7 +127,6 @@ class ExecutionService: ObservableObject {
             return "mvn clean install"
         }
         
-        // 3. Gradle (build.gradle 또는 build.gradle.kts)
         let hasBuildGradle = try dockerService.fileExists(container: container, path: "build.gradle")
         let hasBuildGradleKts = try dockerService.fileExists(container: container, path: "build.gradle.kts")
         if hasBuildGradle || hasBuildGradleKts {
@@ -138,27 +140,34 @@ class ExecutionService: ObservableObject {
             return "gradle build"
         }
         
-        // 4. Node.js
         if try dockerService.fileExists(container: container, path: "package.json") {
             return "npm start"
         }
         
-        // 5. Python
         if try dockerService.fileExists(container: container, path: "main.py") {
             return "python3 main.py"
         }
         
-        // 6. Java (단일 파일)
         if try dockerService.fileExists(container: container, path: "Main.java") {
             return "javac Main.java && java Main"
         }
         
-        // 7. Go
         if try dockerService.fileExists(container: container, path: "go.mod") {
             return "go run ."
         }
         
         throw NSError(domain: "ExecutionService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Cannot detect project type"])
+    }
+
+    private func canUseDockerfileStrategy(container: String) -> Bool {
+        guard let output = try? dockerService.executeShell(
+            container: container,
+            script: "command -v docker >/dev/null 2>&1 && echo yes || echo no"
+        ) else {
+            return false
+        }
+
+        return output.contains("yes")
     }
     
     /// Spring Boot 프로젝트 여부 확인
