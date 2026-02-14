@@ -253,6 +253,18 @@ final class ExecutionServiceTests: XCTestCase {
         XCTAssertNil(loadedCommand)
     }
 
+    func testLoadRunProfileCommand_NormalizesWhitespaceOnlyValueToNil() throws {
+        // Given
+        let repositoryURL = URL(string: "https://github.com/zero-ide/Zero.git")!
+        mockRunProfileService.commands[repositoryURL.absoluteString] = "\n  \t"
+
+        // When
+        let loadedCommand = try service.loadRunProfileCommand(for: repositoryURL)
+
+        // Then
+        XCTAssertNil(loadedCommand)
+    }
+
     func testClearRunProfileCommand() throws {
         // Given
         let repositoryURL = URL(string: "https://github.com/zero-ide/Zero.git")!
