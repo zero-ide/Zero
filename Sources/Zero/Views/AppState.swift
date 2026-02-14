@@ -26,6 +26,7 @@ class AppState: ObservableObject {
     private let sessionManager = SessionManager()
     
     let executionService: ExecutionService
+    let lspContainerManager: LSPContainerManager
     private let orchestrator: ContainerOrchestrator
     
     // 테스트를 위한 Factory
@@ -36,6 +37,7 @@ class AppState: ObservableObject {
     init() {
         let docker = DockerService()
         self.executionService = ExecutionService(dockerService: docker)
+        self.lspContainerManager = LSPContainerManager(dockerService: docker)
         self.orchestrator = ContainerOrchestrator(dockerService: docker, sessionManager: sessionManager)
         
         checkLoginStatus()
@@ -187,5 +189,21 @@ class AppState: ObservableObject {
         } catch {
             print("Failed to delete session: \(error)")
         }
+    }
+
+    func ensureJavaLSPReady() async -> Bool {
+        await lspContainerManager.ensureLSPContainerRunning(language: "java")
+    }
+
+    func javaLSPBootstrapMessage() -> String {
+        if let error = lspContainerManager.errorMessage, !error.isEmpty {
+            return error
+        }
+
+        if !lspContainerManager.statusMessage.isEmpty {
+            return lspContainerManager.statusMessage
+        }
+
+        return "Starting..."
     }
 }

@@ -14,6 +14,8 @@ struct EditorView: View {
     @State private var cursorColumn: Int = 1
     @State private var showTerminal: Bool = false
     @State private var showGitPanel: Bool = false
+    @State private var lspStatusMessage: String = ""
+    @State private var isRecoveringLSP: Bool = false
     
     @EnvironmentObject var appState: AppState
     
@@ -83,16 +85,55 @@ struct EditorView: View {
                     
                     Divider()
                     
-                    // 에디터
-                    CodeEditorView(
-                        content: $fileContent,
-                        language: currentLanguage,
-                        onReady: { isEditorReady = true },
-                        onCursorChange: { line, column in
-                            cursorLine = line
-                            cursorColumn = column
+                    Group {
+                        if currentLanguage == "java" {
+                            MonacoWebView(
+                                content: $fileContent,
+                                language: currentLanguage,
+                                documentPath: selectedFile?.path,
+                                enableLSP: true,
+                                onReady: {
+                                    isEditorReady = true
+                                    if lspStatusMessage.isEmpty || lspStatusMessage == "Starting..." || lspStatusMessage == "LSP ready" {
+                                        lspStatusMessage = "Initializing..."
+                                    }
+                                },
+                                onCursorChange: { line, column in
+                                    cursorLine = line
+                                    cursorColumn = column
+                                },
+                                onLSPStatusChange: { status in
+                                    lspStatusMessage = status
+
+                                    if (status == "Disconnected" || status == "Error" || status == "Init Failed" || status == "Init Delayed") && !isRecoveringLSP {
+                                        isRecoveringLSP = true
+
+                                        Task {
+                                            let isReady = await appState.ensureJavaLSPReady()
+
+                                            await MainActor.run {
+                                                if currentLanguage == "java" {
+                                                    lspStatusMessage = isReady ? "Initializing..." : appState.javaLSPBootstrapMessage()
+                                                }
+
+                                                isRecoveringLSP = false
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+                        } else {
+                            CodeEditorView(
+                                content: $fileContent,
+                                language: currentLanguage,
+                                onReady: { isEditorReady = true },
+                                onCursorChange: { line, column in
+                                    cursorLine = line
+                                    cursorColumn = column
+                                }
+                            )
                         }
-                    )
+                    }
                     .onChange(of: fileContent) { _, _ in
                         if !isLoadingFile {
                             hasUnsavedChanges = true
@@ -116,7 +157,15 @@ struct EditorView: View {
                                 .font(.system(size: 11))
                         }
                         .foregroundStyle(.secondary)
-                        
+
+                        if currentLanguage == "java" {
+                            Text("LSP: \(lspStatusMessage.isEmpty ? "Starting..." : lspStatusMessage)")
+                                .font(.system(size: 11))
+                                .foregroundStyle(
+                                    (lspStatusMessage == "Ready" || lspStatusMessage == "Connected") ? Color.green : Color.secondary
+                                )
+                        }
+
                         Spacer()
                         
                         Text("Ln \(cursorLine), Col \(cursorColumn)")
@@ -209,6 +258,19 @@ struct EditorView: View {
         
         isLoadingFile = true
         currentLanguage = FileIconHelper.languageName(for: file.name)
+        lspStatusMessage = currentLanguage == "java" ? "Starting..." : ""
+
+        if currentLanguage == "java" {
+            Task {
+                let isReady = await appState.ensureJavaLSPReady()
+
+                await MainActor.run {
+                    if currentLanguage == "java" {
+                        lspStatusMessage = isReady ? "Initializing..." : appState.javaLSPBootstrapMessage()
+                    }
+                }
+            }
+        }
         
         Task {
             do {
