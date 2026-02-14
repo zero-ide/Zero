@@ -215,6 +215,11 @@ struct EditorView: View {
                 }
                 .keyboardShortcut("r", modifiers: .command)
                 .disabled(appState.executionService.status == .running)
+
+                Button(action: stopCode) {
+                    Label("Stop", systemImage: "stop.fill")
+                }
+                .disabled(appState.executionService.status != .running)
                 
                 Button(action: saveFile) {
                     if isSaving {
@@ -279,6 +284,10 @@ struct EditorView: View {
                 }
             }
         }
+    }
+
+    private func stopCode() {
+        appState.executionService.stopRunning()
     }
     
     private func loadFile(_ file: FileItem) {
