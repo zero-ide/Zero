@@ -6,38 +6,67 @@ struct GitHistoryView: View {
 
     let gitService: GitService
     let containerName: String
+    var showsHeader: Bool = true
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Image(systemName: "clock.arrow.circlepath")
-                    .foregroundColor(.secondary)
-                Text("History")
-                    .font(.headline)
-                Spacer()
-                if viewModel.isLoading {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                }
-            }
-            .padding()
-            
-            Divider()
-            
-            // Commit List
-            List(viewModel.commits) { commit in
-                CommitRow(commit: commit)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        selectedCommit = commit
-                        Task {
-                            await viewModel.loadDiff(for: commit)
-                        }
+            if showsHeader {
+                // Header
+                HStack {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .foregroundColor(.secondary)
+                    Text("History")
+                        .font(.headline)
+                    Spacer()
+                    if viewModel.isLoading {
+                        ProgressView()
+                            .scaleEffect(0.8)
                     }
-                    .listRowBackground(selectedCommit?.id == commit.id ? Color.accentColor.opacity(0.12) : Color.clear)
+                }
+                .padding()
+
+                Divider()
+            } else if viewModel.isLoading {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
-            .listStyle(.plain)
+
+            if let errorMessage = viewModel.errorMessage, !errorMessage.isEmpty {
+                InlineErrorBanner(message: errorMessage)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+            }
+            
+            if !viewModel.isLoading && viewModel.commits.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                    Text("No commits to display")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 120)
+            } else {
+                // Commit List
+                List(viewModel.commits) { commit in
+                    CommitRow(commit: commit)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectedCommit = commit
+                            Task {
+                                await viewModel.loadDiff(for: commit)
+                            }
+                        }
+                        .listRowBackground(selectedCommit?.id == commit.id ? Color.accentColor.opacity(0.12) : Color.clear)
+                }
+                .listStyle(.plain)
+            }
             
             if let commit = selectedCommit {
                 Divider()

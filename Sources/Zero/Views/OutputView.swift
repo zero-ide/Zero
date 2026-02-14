@@ -14,8 +14,7 @@ struct OutputView: View {
             // Header
             HStack {
                 Label("Output", systemImage: "terminal.fill")
-                    .font(.caption)
-                    .fontWeight(.bold)
+                    .font(.headline)
                 
                 Spacer()
                 
