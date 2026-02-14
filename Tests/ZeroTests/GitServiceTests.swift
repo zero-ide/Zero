@@ -19,6 +19,13 @@ class MockContainerRunner: ContainerRunning {
         self.executedScript = script
         return nextShellOutput
     }
+
+    func executeShellStreaming(container: String, script: String, onOutput: @escaping (String) -> Void) throws -> String {
+        self.executedContainer = container
+        self.executedScript = script
+        onOutput(nextShellOutput)
+        return nextShellOutput
+    }
 }
 
 final class GitServiceTests: XCTestCase {

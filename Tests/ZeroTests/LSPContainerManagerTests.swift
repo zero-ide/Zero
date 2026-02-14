@@ -183,5 +183,13 @@ private final class DockerInstallationCommandRunner: CommandRunning {
         return ""
     }
 
+    func executeStreaming(command: String, arguments: [String], onOutput: @escaping (String) -> Void) throws -> String {
+        let output = try execute(command: command, arguments: arguments)
+        if !output.isEmpty {
+            onOutput(output)
+        }
+        return output
+    }
+
     func cancelCurrentCommand() {}
 }
