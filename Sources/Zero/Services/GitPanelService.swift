@@ -15,6 +15,8 @@ class GitPanelService: ObservableObject {
     @Published var currentBranch = "main"
     @Published var errorMessage: String?
     @Published var isLoading = false
+    @Published var selectedDiff: String = ""
+    @Published var selectedDiffTitle: String?
     
     private var gitService: GitService?
     private var containerName: String?
@@ -128,5 +130,31 @@ class GitPanelService: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func loadDiff(for path: String, staged: Bool) async {
+        guard let gitService = gitService, let containerName = containerName else { return }
+
+        do {
+            let diff: String
+            if staged {
+                diff = try gitService.diffStaged(file: path, in: containerName)
+            } else {
+                diff = try gitService.diff(file: path, in: containerName)
+            }
+
+            selectedDiffTitle = (staged ? "Staged" : "Working Tree") + " · \(path)"
+            selectedDiff = diff.isEmpty ? "No diff output for this file." : diff
+            errorMessage = nil
+        } catch {
+            selectedDiffTitle = "Diff · \(path)"
+            selectedDiff = "Failed to load diff: \(error.localizedDescription)"
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func showUntrackedDiffPlaceholder(for path: String) {
+        selectedDiffTitle = "Untracked · \(path)"
+        selectedDiff = "Untracked files have no git diff until staged."
     }
 }
