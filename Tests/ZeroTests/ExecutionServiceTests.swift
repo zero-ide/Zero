@@ -71,11 +71,52 @@ final class ExecutionServiceTests: XCTestCase {
         XCTAssertEqual(service.output, "")
         XCTAssertEqual(service.status, .running)
     }
+
+    func testStopRunningCancelsActiveExecutionAndMarksCancelled() async {
+        // Given
+        mockDocker.shouldBlockUntilCancelled = true
+
+        let runTask = Task {
+            await service.run(container: "test-container", command: "sleep 10")
+        }
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+
+        // When
+        await MainActor.run {
+            service.stopRunning()
+        }
+        await runTask.value
+
+        // Then
+        XCTAssertTrue(mockDocker.cancelCurrentExecutionCalled)
+        XCTAssertEqual(service.status, .failed("Execution cancelled"))
+        XCTAssertTrue(service.output.contains("Execution cancelled by user"))
+    }
+
+    func testStopRunningNoopsWhenNotRunning() async {
+        // Given
+        await MainActor.run {
+            service.status = .idle
+            service.output = ""
+        }
+
+        // When
+        await MainActor.run {
+            service.stopRunning()
+        }
+
+        // Then
+        XCTAssertFalse(mockDocker.cancelCurrentExecutionCalled)
+        XCTAssertEqual(service.status, .idle)
+    }
 }
 
 class MockExecutionDockerService: DockerServiceProtocol {
     var fileExistenceResults: [String: Bool] = [:]
     var commandOutput: String = ""
+    var shouldBlockUntilCancelled = false
+    var cancelCurrentExecutionCalled = false
     
     func checkInstallation() throws -> Bool { return true }
     
@@ -91,7 +132,16 @@ class MockExecutionDockerService: DockerServiceProtocol {
     func runContainer(image: String, name: String) throws -> String { return "" }
     func executeCommand(container: String, command: String) throws -> String { return "" }
     func executeShell(container: String, script: String) throws -> String {
+        if shouldBlockUntilCancelled {
+            while !cancelCurrentExecutionCalled {
+                usleep(10_000)
+            }
+            throw NSError(domain: "Execution", code: 999, userInfo: [NSLocalizedDescriptionKey: "Cancelled"])
+        }
         return commandOutput
+    }
+    func cancelCurrentExecution() {
+        cancelCurrentExecutionCalled = true
     }
     func listFiles(container: String, path: String) throws -> String { return "" }
     func readFile(container: String, path: String) throws -> String { return "" }

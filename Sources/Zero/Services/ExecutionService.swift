@@ -13,6 +13,7 @@ class ExecutionService: ObservableObject {
     let buildConfigService: BuildConfigurationService
     @Published var status: ExecutionStatus = .idle
     @Published var output: String = ""
+    private var cancellationRequested = false
     
     init(dockerService: DockerServiceProtocol, buildConfigService: BuildConfigurationService = FileBasedBuildConfigurationService()) {
         self.dockerService = dockerService
@@ -22,6 +23,7 @@ class ExecutionService: ObservableObject {
     func run(container: String, command: String) async {
         await MainActor.run {
             self.status = .running
+            self.cancellationRequested = false
             // output 초기화하지 않음
         }
         
@@ -34,15 +36,32 @@ class ExecutionService: ObservableObject {
             let result = try dockerService.executeShell(container: container, script: fullCommand)
             
             await MainActor.run {
-                self.output += "\n" + result
-                self.status = .success
+                if self.cancellationRequested {
+                    self.status = .failed("Execution cancelled")
+                    self.output += "\n⏹️ Execution cancelled by user"
+                } else {
+                    self.output += "\n" + result
+                    self.status = .success
+                }
             }
         } catch {
             await MainActor.run {
-                self.status = .failed(error.localizedDescription)
-                self.output += "\n❌ Error: \(error.localizedDescription)"
+                if self.cancellationRequested {
+                    self.status = .failed("Execution cancelled")
+                    self.output += "\n⏹️ Execution cancelled by user"
+                } else {
+                    self.status = .failed(error.localizedDescription)
+                    self.output += "\n❌ Error: \(error.localizedDescription)"
+                }
             }
         }
+    }
+
+    @MainActor
+    func stopRunning() {
+        guard status == .running else { return }
+        cancellationRequested = true
+        dockerService.cancelCurrentExecution()
     }
 
     @MainActor
