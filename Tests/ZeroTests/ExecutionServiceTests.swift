@@ -110,6 +110,26 @@ final class ExecutionServiceTests: XCTestCase {
         XCTAssertFalse(mockDocker.cancelCurrentExecutionCalled)
         XCTAssertEqual(service.status, .idle)
     }
+
+    func testRunStreamsOutputWhileExecutionIsStillRunning() async {
+        // Given
+        mockDocker.streamingChunks = ["first chunk\n", "second chunk\n"]
+        mockDocker.interChunkDelayNanoseconds = 200_000_000
+
+        // When
+        let runTask = Task {
+            await service.run(container: "test-container", command: "echo hello")
+        }
+
+        try? await Task.sleep(nanoseconds: 80_000_000)
+
+        // Then
+        XCTAssertTrue(service.output.contains("first chunk"), "Expected first streamed chunk before command completion")
+
+        await runTask.value
+        XCTAssertTrue(service.output.contains("second chunk"))
+        XCTAssertEqual(service.status, .success)
+    }
 }
 
 class MockExecutionDockerService: DockerServiceProtocol {
@@ -117,6 +137,8 @@ class MockExecutionDockerService: DockerServiceProtocol {
     var commandOutput: String = ""
     var shouldBlockUntilCancelled = false
     var cancelCurrentExecutionCalled = false
+    var streamingChunks: [String] = []
+    var interChunkDelayNanoseconds: UInt64 = 0
     
     func checkInstallation() throws -> Bool { return true }
     
@@ -138,6 +160,38 @@ class MockExecutionDockerService: DockerServiceProtocol {
             }
             throw NSError(domain: "Execution", code: 999, userInfo: [NSLocalizedDescriptionKey: "Cancelled"])
         }
+
+        if !streamingChunks.isEmpty {
+            for _ in streamingChunks {
+                if interChunkDelayNanoseconds > 0 {
+                    usleep(UInt32(interChunkDelayNanoseconds / 1_000))
+                }
+            }
+            return streamingChunks.joined()
+        }
+
+        return commandOutput
+    }
+
+    func executeShellStreaming(container: String, script: String, onOutput: @escaping (String) -> Void) throws -> String {
+        if shouldBlockUntilCancelled {
+            while !cancelCurrentExecutionCalled {
+                usleep(10_000)
+            }
+            throw NSError(domain: "Execution", code: 999, userInfo: [NSLocalizedDescriptionKey: "Cancelled"])
+        }
+
+        if !streamingChunks.isEmpty {
+            for chunk in streamingChunks {
+                onOutput(chunk)
+                if interChunkDelayNanoseconds > 0 {
+                    usleep(UInt32(interChunkDelayNanoseconds / 1_000))
+                }
+            }
+            return streamingChunks.joined()
+        }
+
+        onOutput(commandOutput)
         return commandOutput
     }
     func cancelCurrentExecution() {

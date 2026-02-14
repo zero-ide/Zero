@@ -13,6 +13,13 @@ class MockCommandRunner: CommandRunning {
         return mockOutput
     }
 
+    func executeStreaming(command: String, arguments: [String], onOutput: @escaping (String) -> Void) throws -> String {
+        self.executedCommand = command
+        self.executedArguments = arguments
+        onOutput(mockOutput)
+        return mockOutput
+    }
+
     func cancelCurrentCommand() {}
 }
 

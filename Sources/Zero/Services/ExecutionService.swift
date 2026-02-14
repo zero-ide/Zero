@@ -33,14 +33,17 @@ class ExecutionService: ObservableObject {
             
             // 2. /workspace로 이동 후 실행
             let fullCommand = "cd /workspace && \(command)"
-            let result = try dockerService.executeShell(container: container, script: fullCommand)
+            _ = try dockerService.executeShellStreaming(container: container, script: fullCommand) { chunk in
+                Task { @MainActor in
+                    self.output += chunk
+                }
+            }
             
             await MainActor.run {
                 if self.cancellationRequested {
                     self.status = .failed("Execution cancelled")
                     self.output += "\n⏹️ Execution cancelled by user"
                 } else {
-                    self.output += "\n" + result
                     self.status = .success
                 }
             }
