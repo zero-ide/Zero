@@ -26,13 +26,9 @@ struct GitPanelView: View {
 
             if let errorMessage = panelService.errorMessage, !errorMessage.isEmpty {
                 Divider()
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundColor(.red)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                InlineErrorBanner(message: errorMessage)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Color.red.opacity(0.08))
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))

@@ -3,6 +3,8 @@ import SwiftUI
 struct RepoListView: View {
     @EnvironmentObject var appState: AppState
     @State private var searchText: String = ""
+    @State private var showingLogoutConfirmation = false
+    @State private var pendingDeleteSession: Session?
     
     var filteredRepos: [Repository] {
         if searchText.isEmpty {
@@ -16,6 +18,12 @@ struct RepoListView: View {
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading) {
+                if let errorMessage = appState.userFacingError, !errorMessage.isEmpty {
+                    InlineErrorBanner(message: errorMessage)
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                }
+
                 // Organization Picker
                 if !appState.organizations.isEmpty {
                     HStack {
@@ -31,7 +39,7 @@ struct RepoListView: View {
                         }
                         .labelsHidden()
                         .pickerStyle(.menu)
-                        .onChange(of: appState.selectedOrg) { _ in
+                        .onChange(of: appState.selectedOrg) { _, _ in
                             Task { await appState.fetchRepositories() }
                         }
                     }
@@ -46,7 +54,11 @@ struct RepoListView: View {
                 if !appState.sessions.isEmpty {
                     Section {
                         ForEach(appState.sessions) { session in
-                            SessionRow(session: session)
+                            SessionRow(
+                                session: session,
+                                onResume: { appState.resumeSession(session) },
+                                onDeleteRequest: { pendingDeleteSession = session }
+                            )
                         }
                     } header: {
                         Text("Active Sessions")
@@ -62,7 +74,9 @@ struct RepoListView: View {
                 Section {
                     List {
                         ForEach(filteredRepos) { repo in
-                            RepoRow(repo: repo)
+                            RepoRow(repo: repo) {
+                                await appState.startSession(for: repo)
+                            }
                                 .onAppear {
                                     if searchText.isEmpty && repo.id == filteredRepos.last?.id {
                                         Task { await appState.loadMoreRepositories() }
@@ -77,6 +91,17 @@ struct RepoListView: View {
                                 Spacer()
                             }
                             .padding()
+                        }
+
+                        if !appState.isLoading && filteredRepos.isEmpty && appState.userFacingError == nil {
+                            HStack {
+                                Spacer()
+                                Text(searchText.isEmpty ? "No repositories found." : "No repositories match \"\(searchText)\".")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                            }
+                            .padding(.vertical, 20)
                         }
                     }
                 } header: {
@@ -93,10 +118,12 @@ struct RepoListView: View {
                     Button(action: { Task { await appState.fetchRepositories() }}) {
                         Image(systemName: "arrow.clockwise")
                     }
+                    .help("Refresh repositories")
+                    .accessibilityLabel("Refresh repositories")
                 }
                 ToolbarItem(placement: .destructiveAction) {
                     Button("Logout") {
-                        try? appState.logout()
+                        showingLogoutConfirmation = true
                     }
                 }
             }
@@ -114,12 +141,43 @@ struct RepoListView: View {
                 LoadingOverlay(message: appState.loadingMessage)
             }
         }
+        .alert("Logout?", isPresented: $showingLogoutConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Logout", role: .destructive) {
+                do {
+                    try appState.logout()
+                } catch {
+                    appState.userFacingError = "Failed to logout."
+                }
+            }
+        } message: {
+            Text("You will need to sign in again to access repositories.")
+        }
+        .alert("Delete Session?", isPresented: Binding(
+            get: { pendingDeleteSession != nil },
+            set: { shouldShow in
+                if !shouldShow {
+                    pendingDeleteSession = nil
+                }
+            }
+        )) {
+            Button("Cancel", role: .cancel) {
+                pendingDeleteSession = nil
+            }
+            Button("Delete", role: .destructive) {
+                guard let session = pendingDeleteSession else { return }
+                appState.deleteSession(session)
+                pendingDeleteSession = nil
+            }
+        } message: {
+            Text("This removes the local session and container reference.")
+        }
     }
 }
 
 struct RepoRow: View {
-    @EnvironmentObject var appState: AppState
     let repo: Repository
+    let onOpen: () async -> Void
     
     var body: some View {
         HStack {
@@ -138,18 +196,25 @@ struct RepoRow: View {
             
             Button("Open") {
                 Task {
-                    await appState.startSession(for: repo)
+                    await onOpen()
                 }
             }
             .buttonStyle(.bordered)
         }
         .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            Task {
+                await onOpen()
+            }
+        }
     }
 }
 
 struct SessionRow: View {
-    @EnvironmentObject var appState: AppState
     let session: Session
+    let onResume: () -> Void
+    let onDeleteRequest: () -> Void
     
     var body: some View {
         HStack {
@@ -167,19 +232,25 @@ struct SessionRow: View {
             Spacer()
             
             Button("Resume") {
-                appState.resumeSession(session)
+                onResume()
             }
             .buttonStyle(.borderedProminent)
             
             Button(role: .destructive) {
-                appState.deleteSession(session)
+                onDeleteRequest()
             } label: {
                 Image(systemName: "trash")
             }
             .buttonStyle(.bordered)
+            .help("Delete session")
+            .accessibilityLabel("Delete session")
         }
         .padding(.vertical, 4)
         .padding(.horizontal)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onResume()
+        }
     }
 }
 
