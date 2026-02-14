@@ -68,6 +68,19 @@ final class ExecutionServiceTests: XCTestCase {
         XCTAssertEqual(command, "swift run")
     }
 
+    func testDetectRunCommand_IgnoresWhitespaceOnlySavedRunProfile() async throws {
+        // Given
+        let repositoryURL = URL(string: "https://github.com/zero-ide/Zero.git")!
+        mockRunProfileService.commands[repositoryURL.absoluteString] = "  \n\t  "
+        mockDocker.fileExistenceResults = ["Package.swift": true]
+
+        // When
+        let command = try await service.detectRunCommand(container: "test-container", repositoryURL: repositoryURL)
+
+        // Then
+        XCTAssertEqual(command, "swift run")
+    }
+
     func testDetectRunCommand_DockerfileTakesPriorityOverSwift() async throws {
         // Given
         mockDocker.dockerCommandAvailable = true
@@ -213,6 +226,31 @@ final class ExecutionServiceTests: XCTestCase {
 
         // Then
         XCTAssertEqual(loadedCommand, "npm run dev")
+    }
+
+    func testSaveRunProfileCommand_TrimsWhitespaceBeforeSaving() throws {
+        // Given
+        let repositoryURL = URL(string: "https://github.com/zero-ide/Zero.git")!
+
+        // When
+        try service.saveRunProfileCommand("  npm run dev  \n", for: repositoryURL)
+        let loadedCommand = try service.loadRunProfileCommand(for: repositoryURL)
+
+        // Then
+        XCTAssertEqual(loadedCommand, "npm run dev")
+    }
+
+    func testSaveRunProfileCommand_WhitespaceOnlyRemovesSavedProfile() throws {
+        // Given
+        let repositoryURL = URL(string: "https://github.com/zero-ide/Zero.git")!
+        try service.saveRunProfileCommand("npm run dev", for: repositoryURL)
+
+        // When
+        try service.saveRunProfileCommand("   \n\t   ", for: repositoryURL)
+        let loadedCommand = try service.loadRunProfileCommand(for: repositoryURL)
+
+        // Then
+        XCTAssertNil(loadedCommand)
     }
 
     func testClearRunProfileCommand() throws {
