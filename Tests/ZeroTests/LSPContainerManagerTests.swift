@@ -182,4 +182,6 @@ private final class DockerInstallationCommandRunner: CommandRunning {
 
         return ""
     }
+
+    func cancelCurrentCommand() {}
 }

@@ -2,9 +2,13 @@ import Foundation
 
 protocol CommandRunning {
     func execute(command: String, arguments: [String]) throws -> String
+    func cancelCurrentCommand()
 }
 
-struct CommandRunner: CommandRunning {
+final class CommandRunner: CommandRunning {
+    private let processLock = NSLock()
+    private var currentProcess: Process?
+
     func execute(command: String, arguments: [String] = []) throws -> String {
         let process = Process()
         let pipe = Pipe()
@@ -12,6 +16,17 @@ struct CommandRunner: CommandRunning {
         process.executableURL = URL(fileURLWithPath: command)
         process.arguments = arguments
         process.standardOutput = pipe
+
+        processLock.lock()
+        currentProcess = process
+        processLock.unlock()
+        defer {
+            processLock.lock()
+            if currentProcess === process {
+                currentProcess = nil
+            }
+            processLock.unlock()
+        }
         
         try process.run()
         process.waitUntilExit()
@@ -25,5 +40,13 @@ struct CommandRunner: CommandRunning {
         }
         
         return output
+    }
+
+    func cancelCurrentCommand() {
+        processLock.lock()
+        let process = currentProcess
+        processLock.unlock()
+
+        process?.terminate()
     }
 }
