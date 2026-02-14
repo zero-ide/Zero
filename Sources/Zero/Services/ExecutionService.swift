@@ -182,7 +182,7 @@ class ExecutionService: ObservableObject {
     }
 
     func loadRunProfileCommand(for repositoryURL: URL) throws -> String? {
-        try runProfileService.loadCommand(for: repositoryURL)
+        normalizeCommand(try runProfileService.loadCommand(for: repositoryURL))
     }
 
     func clearRunProfile(for repositoryURL: URL) throws {
