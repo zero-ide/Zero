@@ -16,6 +16,8 @@ struct EditorView: View {
     @State private var showGitPanel: Bool = false
     @State private var lspStatusMessage: String = ""
     @State private var isRecoveringLSP: Bool = false
+    @State private var terminalHeight: CGFloat = 180
+    @State private var terminalDragStartHeight: CGFloat = 180
     
     @EnvironmentObject var appState: AppState
     
@@ -141,9 +143,31 @@ struct EditorView: View {
                     }
                     
                     if showTerminal {
-                        Divider()
-                        OutputView(executionService: appState.executionService)
-                            .transition(.move(edge: .bottom))
+                        VStack(spacing: 0) {
+                            Rectangle()
+                                .fill(Color(nsColor: .separatorColor))
+                                .frame(height: 12)
+                                .overlay {
+                                    Capsule()
+                                        .fill(Color(nsColor: .tertiaryLabelColor))
+                                        .frame(width: 44, height: 4)
+                                }
+                                .contentShape(Rectangle())
+                                .gesture(
+                                    DragGesture(minimumDistance: 0)
+                                        .onChanged { value in
+                                            let proposedHeight = terminalDragStartHeight - value.translation.height
+                                            terminalHeight = min(max(120, proposedHeight), 500)
+                                        }
+                                        .onEnded { _ in
+                                            terminalDragStartHeight = terminalHeight
+                                        }
+                                )
+
+                            OutputView(executionService: appState.executionService)
+                                .frame(height: terminalHeight)
+                        }
+                        .transition(.move(edge: .bottom))
                     }
                     
                     Divider()
@@ -205,6 +229,9 @@ struct EditorView: View {
                 
                 Button(action: {
                     withAnimation { showTerminal.toggle() }
+                    if showTerminal {
+                        terminalDragStartHeight = terminalHeight
+                    }
                 }) {
                     Label("Terminal", systemImage: "terminal")
                         .foregroundStyle(showTerminal ? Color.accentColor : Color.primary)
@@ -227,6 +254,7 @@ struct EditorView: View {
     
     private func runCode() {
         withAnimation { showTerminal = true }
+        terminalDragStartHeight = terminalHeight
         Task {
             // UI 즉시 업데이트
             await MainActor.run {
@@ -347,20 +375,11 @@ struct GitPanelSheet: View {
                 // Content
                 switch selectedTab {
                 case 0:
-                    GitPanelView()
-                        .onAppear {
-                            setupGitPanel()
-                        }
+                    GitPanelView(gitService: gitService, containerName: session.containerName)
                 case 1:
-                    GitHistoryView()
-                        .onAppear {
-                            setupGitHistory()
-                        }
+                    GitHistoryView(gitService: gitService, containerName: session.containerName)
                 case 2:
-                    GitStashView()
-                        .onAppear {
-                            setupGitStash()
-                        }
+                    GitStashView(gitService: gitService, containerName: session.containerName)
                 default:
                     EmptyView()
                 }
@@ -375,17 +394,5 @@ struct GitPanelSheet: View {
             }
         }
         .frame(minWidth: 400, minHeight: 500)
-    }
-    
-    private func setupGitPanel() {
-        // This would be handled by the view model in a real implementation
-    }
-    
-    private func setupGitHistory() {
-        // This would be handled by the view model in a real implementation
-    }
-    
-    private func setupGitStash() {
-        // This would be handled by the view model in a real implementation
     }
 }
