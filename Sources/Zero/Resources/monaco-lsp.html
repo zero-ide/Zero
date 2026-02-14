@@ -11,13 +11,15 @@
             bottom: 0; 
             right: 0; 
             padding: 4px 8px; 
-            background: #007acc; 
+            background: #3a3a3a; 
             color: white; 
             font-size: 12px;
             display: none;
         }
-        #status.connected { display: block; background: #4caf50; }
-        #status.disconnected { display: block; background: #f44336; }
+        #status.info { display: block; background: #007acc; }
+        #status.success { display: block; background: #4caf50; }
+        #status.warning { display: block; background: #f59e0b; }
+        #status.error { display: block; background: #f44336; }
     </style>
 </head>
 <body>
@@ -30,13 +32,15 @@
         let lspSocket = null;
         let lspEnabled = false;
         let lspConnected = false;
-        let requestId = 0;
+        const sessionId = `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+        let requestCounter = 0;
         const pendingRequests = new Map();
         let reconnectTimer = null;
         let currentDocumentPath = '/workspace/Main.java';
         let currentLanguage = 'java';
         let documentVersion = 1;
         let didOpenSent = false;
+        let isInitialized = false;
         const REQUEST_TIMEOUT_MS = 5000;
         const INITIALIZE_TIMEOUT_MS = 30000;
         const INITIALIZE_RETRY_DELAY_MS = 2000;
@@ -76,8 +80,22 @@
 
         function setStatus(text, stateClass) {
             const statusEl = document.getElementById('status');
-            statusEl.className = stateClass;
             statusEl.textContent = `LSP ${text}`;
+
+            const hasNativeBridge = !!(
+                window.webkit &&
+                window.webkit.messageHandlers &&
+                window.webkit.messageHandlers.lspStatus
+            );
+
+            if (hasNativeBridge) {
+                statusEl.style.display = 'none';
+                statusEl.className = '';
+            } else {
+                statusEl.style.display = 'block';
+                statusEl.className = stateClass;
+            }
+
             postToNative('lspStatus', text);
         }
 
@@ -124,7 +142,7 @@
                 postToNative('contentChanged', value);
 
                 // Send LSP didChange notification if connected
-                if (lspConnected && lspSocket && didOpenSent) {
+                if (lspConnected && lspSocket && didOpenSent && isInitialized) {
                     sendDidChange(value);
                 }
             });
@@ -150,7 +168,7 @@
                 return;
             }
 
-            setStatus('Connecting...', 'disconnected');
+            setStatus('Connecting...', 'info');
 
             const socket = new WebSocket('ws://localhost:8080');
             lspSocket = socket;
@@ -162,7 +180,8 @@
 
                 lspConnected = true;
                 didOpenSent = false;
-                setStatus('Connected', 'connected');
+                isInitialized = false;
+                setStatus('Initializing...', 'info');
                 initializeLSP(socket);
             };
 
@@ -179,7 +198,7 @@
                 }
             };
 
-            socket.onclose = () => {
+            socket.onclose = (event) => {
                 if (socket !== lspSocket) {
                     return;
                 }
@@ -187,8 +206,15 @@
                 lspConnected = false;
                 lspSocket = null;
                 didOpenSent = false;
+                isInitialized = false;
                 flushPendingRequests('LSP socket closed');
-                setStatus('Disconnected', 'disconnected');
+
+                if (event.code === 1012 && event.reason === 'Replaced by a newer editor session') {
+                    setStatus('Session Replaced', 'warning');
+                    return;
+                }
+
+                setStatus('Disconnected', 'error');
                 scheduleReconnect();
             };
 
@@ -198,7 +224,8 @@
                 }
 
                 lspConnected = false;
-                setStatus('Error', 'disconnected');
+                isInitialized = false;
+                setStatus('Error', 'error');
 
                 try {
                     socket.close();
@@ -228,7 +255,10 @@
                     return;
                 }
 
+                isInitialized = true;
+                sendLSPNotification('initialized', {});
                 sendDidOpen();
+                setStatus('Ready', 'success');
             })
             .catch(() => {
                 if (socket !== lspSocket || !lspEnabled || !lspConnected) {
@@ -236,17 +266,22 @@
                 }
 
                 if (retryCount < 2) {
-                    setStatus('Initializing...', 'disconnected');
+                    setStatus('Initializing...', 'info');
                     setTimeout(() => initializeLSP(socket, retryCount + 1), INITIALIZE_RETRY_DELAY_MS);
                     return;
                 }
 
-                setStatus('Init Delayed', 'disconnected');
+                setStatus('Init Failed', 'error');
+                try {
+                    socket.close();
+                } catch (_) {
+                    scheduleReconnect();
+                }
             });
         }
 
         function sendDidOpen() {
-            if (!lspConnected || !lspSocket || !editor) {
+            if (!lspConnected || !lspSocket || !editor || !isInitialized) {
                 return;
             }
 
@@ -264,7 +299,7 @@
         }
 
         function sendDidChange(text) {
-            if (!lspConnected || !lspSocket || !didOpenSent) {
+            if (!lspConnected || !lspSocket || !didOpenSent || !isInitialized) {
                 return;
             }
 
@@ -341,7 +376,7 @@
                     return;
                 }
 
-                const id = ++requestId;
+                const id = `${sessionId}:${++requestCounter}`;
                 pendingRequests.set(id, { resolve, reject });
 
                 const message = { jsonrpc: '2.0', id, method, params };
@@ -417,7 +452,7 @@
                 }
             }
 
-            if (lspConnected && didOpenSent && editor) {
+            if (lspConnected && didOpenSent && isInitialized && editor) {
                 sendDidChange(editor.getValue());
             }
         }
@@ -429,7 +464,7 @@
                 monaco.editor.setModelLanguage(editor.getModel(), currentLanguage);
             }
 
-            if (lspConnected && didOpenSent) {
+            if (lspConnected && didOpenSent && isInitialized) {
                 sendDidOpen();
             }
         }
@@ -443,7 +478,7 @@
             currentDocumentPath = nextPath;
             documentVersion = 1;
 
-            if (lspConnected && editor) {
+            if (lspConnected && editor && isInitialized) {
                 sendDidOpen();
             }
         }
@@ -460,6 +495,7 @@
         function disableLSP() {
             lspEnabled = false;
             lspConnected = false;
+            isInitialized = false;
 
             if (reconnectTimer) {
                 clearTimeout(reconnectTimer);
@@ -475,7 +511,7 @@
             }
 
             didOpenSent = false;
-            setStatus('Disconnected', 'disconnected');
+            setStatus('Disconnected', 'error');
         }
     </script>
 </body>

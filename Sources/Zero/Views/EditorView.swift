@@ -95,7 +95,7 @@ struct EditorView: View {
                                 onReady: {
                                     isEditorReady = true
                                     if lspStatusMessage.isEmpty || lspStatusMessage == "Starting..." || lspStatusMessage == "LSP ready" {
-                                        lspStatusMessage = "Connecting..."
+                                        lspStatusMessage = "Initializing..."
                                     }
                                 },
                                 onCursorChange: { line, column in
@@ -105,7 +105,7 @@ struct EditorView: View {
                                 onLSPStatusChange: { status in
                                     lspStatusMessage = status
 
-                                    if (status == "Disconnected" || status == "Error" || status == "Init Failed") && !isRecoveringLSP {
+                                    if (status == "Disconnected" || status == "Error" || status == "Init Failed" || status == "Init Delayed") && !isRecoveringLSP {
                                         isRecoveringLSP = true
 
                                         Task {
@@ -113,7 +113,7 @@ struct EditorView: View {
 
                                             await MainActor.run {
                                                 if currentLanguage == "java" {
-                                                    lspStatusMessage = isReady ? "Connecting..." : appState.javaLSPBootstrapMessage()
+                                                    lspStatusMessage = isReady ? "Initializing..." : appState.javaLSPBootstrapMessage()
                                                 }
 
                                                 isRecoveringLSP = false
@@ -159,10 +159,10 @@ struct EditorView: View {
                         .foregroundStyle(.secondary)
 
                         if currentLanguage == "java" {
-                            Text("LSP: \(lspStatusMessage.isEmpty ? "Connecting..." : lspStatusMessage)")
+                            Text("LSP: \(lspStatusMessage.isEmpty ? "Starting..." : lspStatusMessage)")
                                 .font(.system(size: 11))
                                 .foregroundStyle(
-                                    lspStatusMessage == "Connected" ? Color.green : Color.secondary
+                                    (lspStatusMessage == "Ready" || lspStatusMessage == "Connected") ? Color.green : Color.secondary
                                 )
                         }
 
@@ -266,7 +266,7 @@ struct EditorView: View {
 
                 await MainActor.run {
                     if currentLanguage == "java" {
-                        lspStatusMessage = isReady ? "Connecting..." : appState.javaLSPBootstrapMessage()
+                        lspStatusMessage = isReady ? "Initializing..." : appState.javaLSPBootstrapMessage()
                     }
                 }
             }
