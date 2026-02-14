@@ -4,6 +4,9 @@ struct GitStashView: View {
     @StateObject private var viewModel = GitStashViewModel()
     @State private var stashMessage = ""
     @State private var showingStashAlert = false
+
+    let gitService: GitService
+    let containerName: String
     
     var body: some View {
         VStack(spacing: 0) {
@@ -57,6 +60,7 @@ struct GitStashView: View {
         }
         .frame(minWidth: 300)
         .task {
+            viewModel.setup(gitService: gitService, containerName: containerName)
             await viewModel.loadStashes()
         }
         .alert("Stash Changes", isPresented: $showingStashAlert) {
@@ -174,6 +178,9 @@ class GitStashViewModel: ObservableObject {
 }
 
 #Preview {
-    GitStashView()
+    GitStashView(
+        gitService: GitService(runner: DockerService()),
+        containerName: "preview"
+    )
         .frame(width: 350, height: 400)
 }

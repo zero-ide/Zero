@@ -49,6 +49,28 @@ final class ExecutionServiceTests: XCTestCase {
         XCTAssertEqual(service.status, .success)
         XCTAssertTrue(service.output.contains("Hello World"))
     }
+
+    func testClearOutputResetsToIdleWhenNotRunning() async {
+        await MainActor.run {
+            service.output = "old log"
+            service.status = .success
+            service.clearOutput()
+        }
+
+        XCTAssertEqual(service.output, "")
+        XCTAssertEqual(service.status, .idle)
+    }
+
+    func testClearOutputKeepsRunningState() async {
+        await MainActor.run {
+            service.output = "running log"
+            service.status = .running
+            service.clearOutput()
+        }
+
+        XCTAssertEqual(service.output, "")
+        XCTAssertEqual(service.status, .running)
+    }
 }
 
 class MockExecutionDockerService: DockerServiceProtocol {
