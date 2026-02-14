@@ -107,6 +107,48 @@ class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.sessions.count, 0)
         XCTAssertEqual(appState.userFacingError, "Session is no longer available. Please start a new session.")
     }
+
+    func testLoadSessionsWithHealthCheckPrunesStalePersistedSessions() async {
+        // Given
+        let healthySession = Session.mock
+        let staleSession = Session(
+            id: UUID(),
+            repoURL: healthySession.repoURL,
+            containerName: "zero-dev-stale",
+            createdAt: Date(),
+            lastActiveAt: Date()
+        )
+
+        var persistedSessions: [Session] = [healthySession, staleSession]
+        appState.persistedSessionLoader = { persistedSessions }
+        appState.persistedSessionDeleter = { session in
+            persistedSessions.removeAll { $0.id == session.id }
+        }
+        appState.sessionContainerHealthCheck = { session in
+            session.id == healthySession.id
+        }
+
+        // When
+        await appState.loadSessionsWithHealthCheck()
+
+        // Then
+        XCTAssertEqual(appState.sessions.map(\.id), [healthySession.id])
+        XCTAssertEqual(persistedSessions.map(\.id), [healthySession.id])
+        XCTAssertNil(appState.userFacingError)
+    }
+
+    func testLoadSessionsWithHealthCheckShowsErrorWhenLoadingFails() async {
+        // Given
+        appState.persistedSessionLoader = {
+            throw NSError(domain: "test", code: 1, userInfo: nil)
+        }
+
+        // When
+        await appState.loadSessionsWithHealthCheck()
+
+        // Then
+        XCTAssertEqual(appState.userFacingError, "Failed to load sessions.")
+    }
     
     // MARK: - Session Management Tests
     
