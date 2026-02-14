@@ -56,4 +56,20 @@ final class RunProfileServiceTests: XCTestCase {
         XCTAssertNil(try service.loadCommand(for: firstRepository))
         XCTAssertEqual(try service.loadCommand(for: secondRepository), "npm start")
     }
+
+    func testSaveRecoversFromCorruptedStoreFile() throws {
+        // Given
+        let repositoryURL = URL(string: "https://github.com/zero-ide/Zero.git")!
+        try "{not-valid-json".write(
+            to: URL(fileURLWithPath: testConfigPath),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        // When
+        try service.save(command: "swift run", for: repositoryURL)
+
+        // Then
+        XCTAssertEqual(try service.loadCommand(for: repositoryURL), "swift run")
+    }
 }
