@@ -138,7 +138,7 @@ struct RepoListView: View {
         .task {
             await appState.fetchRepositories()
             await appState.fetchOrganizations()
-            appState.loadSessions()
+            await appState.loadSessionsWithHealthCheck()
         }
         .overlay {
             if appState.isLoading {
