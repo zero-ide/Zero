@@ -13,6 +13,17 @@ final class MonacoWebViewTests: XCTestCase {
         XCTAssertEqual(escaped, "path\\\\to\\\\file\\nlet value = \\\'hello\\\'")
     }
 
+    func testEscapeForJavaScriptLiteralEscapesCarriageReturns() {
+        // Given
+        let source = "line1\r\nline2"
+
+        // When
+        let escaped = MonacoWebView.escapeForJavaScriptLiteral(source)
+
+        // Then
+        XCTAssertEqual(escaped, "line1\\r\\nline2")
+    }
+
     func testFileURIFromPathNormalizesAbsoluteWorkspacePath() {
         // Given
         let path = "/workspace/src/Main.java"
