@@ -36,14 +36,23 @@ class AppState: ObservableObject {
     }
 
     var sessionContainerHealthCheck: (Session) async -> Bool
+    var persistedSessionLoader: () throws -> [Session]
+    var persistedSessionDeleter: (Session) throws -> Void
     
     init() {
         let docker = DockerService()
+        let manager = sessionManager
         self.executionService = ExecutionService(dockerService: docker)
         self.lspContainerManager = LSPContainerManager(dockerService: docker)
         self.orchestrator = ContainerOrchestrator(dockerService: docker, sessionManager: sessionManager)
         self.sessionContainerHealthCheck = { session in
             (try? docker.executeCommand(container: session.containerName, command: "true")) != nil
+        }
+        self.persistedSessionLoader = {
+            try manager.loadSessions()
+        }
+        self.persistedSessionDeleter = { session in
+            try manager.deleteSession(session)
         }
         
         checkLoginStatus()
@@ -153,7 +162,37 @@ class AppState: ObservableObject {
     
     func loadSessions() {
         do {
-            self.sessions = try sessionManager.loadSessions()
+            self.sessions = try persistedSessionLoader()
+            userFacingError = nil
+        } catch {
+            print("Failed to load sessions: \(error)")
+            userFacingError = "Failed to load sessions."
+        }
+    }
+
+    func loadSessionsWithHealthCheck() async {
+        do {
+            let persistedSessions = try persistedSessionLoader()
+            var healthySessions: [Session] = []
+            var staleSessions: [Session] = []
+
+            for session in persistedSessions {
+                if await sessionContainerHealthCheck(session) {
+                    healthySessions.append(session)
+                } else {
+                    staleSessions.append(session)
+                }
+            }
+
+            for session in staleSessions {
+                do {
+                    try persistedSessionDeleter(session)
+                } catch {
+                    print("Failed to delete stale session: \(error)")
+                }
+            }
+
+            self.sessions = healthySessions
             userFacingError = nil
         } catch {
             print("Failed to load sessions: \(error)")
@@ -191,7 +230,7 @@ class AppState: ObservableObject {
         guard await sessionContainerHealthCheck(session) else {
             sessions.removeAll { $0.id == session.id }
             do {
-                try sessionManager.deleteSession(session)
+                try persistedSessionDeleter(session)
             } catch {
                 print("Failed to clean stale session: \(error)")
             }
