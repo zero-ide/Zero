@@ -202,8 +202,6 @@ class LSPContainerManager: ObservableObject {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
 
-        try process.run()
-
         return try await withCheckedThrowingContinuation { continuation in
             process.terminationHandler = { _ in
                 let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
@@ -223,18 +221,39 @@ class LSPContainerManager: ObservableObject {
                     ))
                 }
             }
+
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: error)
+            }
         }
     }
 
     private static func defaultDockerContextPath(_ language: String) -> String? {
         let fileManager = FileManager.default
-        let candidates = [
-            "\(fileManager.currentDirectoryPath)/docker/lsp-\(language)",
-            "\(NSHomeDirectory())/Documents/Zero/docker/lsp-\(language)",
-            "/Users/\(NSUserName())/Documents/Zero/docker/lsp-\(language)"
-        ]
+        let contextSuffix = "lsp-\(language)"
+        var candidates: [String] = []
 
-        return candidates.first(where: { fileManager.fileExists(atPath: $0) })
+        if let overrideRoot = ProcessInfo.processInfo.environment["ZERO_LSP_DOCKER_CONTEXT"], !overrideRoot.isEmpty {
+            if overrideRoot.hasSuffix("/\(contextSuffix)") {
+                candidates.append(overrideRoot)
+            } else {
+                candidates.append("\(overrideRoot)/\(contextSuffix)")
+            }
+        }
+
+        if let resourcePath = Bundle.main.resourceURL?.appendingPathComponent("docker/\(contextSuffix)").path {
+            candidates.append(resourcePath)
+        }
+
+        candidates.append("\(fileManager.currentDirectoryPath)/docker/\(contextSuffix)")
+        candidates.append("\(NSHomeDirectory())/Documents/Zero/docker/\(contextSuffix)")
+        candidates.append("/Users/\(NSUserName())/Documents/Zero/docker/\(contextSuffix)")
+
+        return candidates.first(where: { path in
+            fileManager.fileExists(atPath: path) && fileManager.fileExists(atPath: "\(path)/Dockerfile")
+        })
     }
 }
 
