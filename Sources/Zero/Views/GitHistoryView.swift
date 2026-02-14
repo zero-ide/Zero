@@ -42,7 +42,7 @@ struct GitHistoryView: View {
                     .padding(.vertical, 8)
             }
             
-            if !viewModel.isLoading && viewModel.commits.isEmpty {
+            if !viewModel.isLoading && viewModel.errorMessage == nil && viewModel.commits.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.title3)
