@@ -1,5 +1,22 @@
 import Foundation
 
+enum GitHubServiceError: Error, Equatable {
+    case invalidResponse
+    case unauthorized
+    case forbidden
+    case rateLimited
+    case badStatusCode(Int)
+
+    var requiresRelogin: Bool {
+        switch self {
+        case .unauthorized, .forbidden:
+            return true
+        case .invalidResponse, .rateLimited, .badStatusCode:
+            return false
+        }
+    }
+}
+
 class GitHubService {
     private let token: String
     private let baseURL = "https://api.github.com"
@@ -45,11 +62,8 @@ class GitHubService {
     func fetchRepositories(page: Int = 1, type: String? = nil) async throws -> [Repository] {
         let request = createFetchReposRequest(page: page, type: type)
         let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw URLError(.badServerResponse)
-        }
+
+        try validateResponse(response)
         
         return try JSONDecoder().decode([Repository].self, from: data)
     }
@@ -57,11 +71,8 @@ class GitHubService {
     func fetchOrganizations() async throws -> [Organization] {
         let request = createFetchOrgsRequest()
         let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw URLError(.badServerResponse)
-        }
+
+        try validateResponse(response)
         
         return try JSONDecoder().decode([Organization].self, from: data)
     }
@@ -69,12 +80,28 @@ class GitHubService {
     func fetchOrgRepositories(org: String, page: Int = 1) async throws -> [Repository] {
         let request = createFetchOrgReposRequest(org: org, page: page)
         let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw URLError(.badServerResponse)
-        }
+
+        try validateResponse(response)
         
         return try JSONDecoder().decode([Repository].self, from: data)
+    }
+
+    private func validateResponse(_ response: URLResponse) throws {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GitHubServiceError.invalidResponse
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            return
+        case 401:
+            throw GitHubServiceError.unauthorized
+        case 403:
+            throw GitHubServiceError.forbidden
+        case 429:
+            throw GitHubServiceError.rateLimited
+        default:
+            throw GitHubServiceError.badStatusCode(httpResponse.statusCode)
+        }
     }
 }
