@@ -204,7 +204,7 @@ class AppState: ObservableObject {
             self.organizations = try await service.fetchOrganizations()
             reconcileSelectedOrgContext()
         } catch {
-            print("Failed to fetch orgs: \(error)")
+            logError("Failed to fetch orgs", error: error)
             handleGitHubFetchError(error, defaultMessage: "Failed to load organizations. Please try again.")
         }
     }
@@ -235,7 +235,7 @@ class AppState: ObservableObject {
                 hasMoreRepos = false
             }
         } catch {
-            print("Failed to fetch repos: \(error)")
+            logError("Failed to fetch repos", error: error)
             handleGitHubFetchError(error, defaultMessage: "Failed to load repositories. Please check your token and network.")
         }
     }
@@ -269,7 +269,7 @@ class AppState: ObservableObject {
                 hasMoreRepos = false
             }
         } catch {
-            print("Failed to load more repos: \(error)")
+            logError("Failed to load more repos", error: error)
             handleGitHubFetchError(error, defaultMessage: "Failed to load more repositories.")
         }
     }
@@ -279,7 +279,7 @@ class AppState: ObservableObject {
             self.sessions = try persistedSessionLoader()
             userFacingError = nil
         } catch {
-            print("Failed to load sessions: \(error)")
+            logError("Failed to load sessions", error: error)
             userFacingError = "Failed to load sessions."
         }
     }
@@ -302,14 +302,14 @@ class AppState: ObservableObject {
                 do {
                     try persistedSessionDeleter(session)
                 } catch {
-                    print("Failed to delete stale session: \(error)")
+                    logError("Failed to delete stale session", error: error)
                 }
             }
 
             self.sessions = healthySessions
             userFacingError = nil
         } catch {
-            print("Failed to load sessions: \(error)")
+            logError("Failed to load sessions", error: error)
             userFacingError = "Failed to load sessions."
         }
     }
@@ -328,9 +328,10 @@ class AppState: ObservableObject {
             self.isEditing = true
             loadSessions() // 세션 목록 갱신
         } catch {
-            print("Failed to start session: \(error)")
-            loadingMessage = "Error: \(error.localizedDescription)"
-            userFacingError = "Failed to start session: \(error.localizedDescription)"
+            logError("Failed to start session", error: error)
+            let message = userMessage(for: error, fallback: "Failed to start session.")
+            loadingMessage = "Error: \(message)"
+            userFacingError = message
         }
         
         isLoading = false
@@ -346,7 +347,7 @@ class AppState: ObservableObject {
             do {
                 try persistedSessionDeleter(session)
             } catch {
-                print("Failed to clean stale session: \(error)")
+                logError("Failed to clean stale session", error: error)
             }
 
             activeSession = nil
@@ -372,7 +373,7 @@ class AppState: ObservableObject {
             userFacingError = nil
             loadSessions()
         } catch {
-            print("Failed to delete session: \(error)")
+            logError("Failed to delete session", error: error)
             userFacingError = "Failed to delete session."
         }
     }
@@ -459,6 +460,30 @@ class AppState: ObservableObject {
         setSelectedOrgWithoutPersisting(nil)
         hasMoreRepos = false
         isLoadingMore = false
+    }
+
+    private func userMessage(for error: Error, fallback: String) -> String {
+        if let zeroError = error as? ZeroError {
+            switch zeroError {
+            case .runtimeCommandFailed(let userMessage, _):
+                return userMessage
+            default:
+                return zeroError.localizedDescription
+            }
+        }
+
+        let generic = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        return generic.isEmpty ? fallback : generic
+    }
+
+    private func logError(_ prefix: String, error: Error) {
+        if let zeroError = error as? ZeroError,
+           case let .runtimeCommandFailed(_, debugDetails) = zeroError {
+            print("\(prefix): \(debugDetails)")
+            return
+        }
+
+        print("\(prefix): \(error)")
     }
 }
 
