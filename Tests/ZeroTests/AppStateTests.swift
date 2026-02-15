@@ -105,6 +105,31 @@ class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.accessToken, "gho_test_token")
         XCTAssertNil(appState.userFacingError)
     }
+
+    func testHandleOAuthCallbackMissingConfigurationClearsPendingOAuthContext() async {
+        // Given
+        appState.oauthClientIDProvider = { "client-id" }
+        appState.oauthClientSecretProvider = { "client-secret" }
+        appState.oauthRedirectURIProvider = { "zero://auth/callback" }
+
+        guard let loginURL = try? appState.beginOAuthLogin(),
+              let loginComponents = URLComponents(url: loginURL, resolvingAgainstBaseURL: false),
+              let expectedState = loginComponents.queryItems?.first(where: { $0.name == "state" })?.value else {
+            XCTFail("Failed to prepare OAuth login context")
+            return
+        }
+
+        appState.oauthClientSecretProvider = { nil }
+        let callback = URL(string: "zero://auth/callback?code=code-1&state=\(expectedState)")!
+
+        // When
+        await appState.handleOAuthCallback(callback)
+
+        // Then
+        XCTAssertEqual(appState.userFacingError, "OAuth is not configured. Set GitHub OAuth credentials in environment.")
+        XCTAssertNil(appState.pendingOAuthStateForTesting)
+        XCTAssertNil(appState.pendingOAuthCodeVerifierForTesting)
+    }
     
     // MARK: - Editor State Tests
     

@@ -142,12 +142,14 @@ class AppState: ObservableObject {
               !clientID.isEmpty,
               let clientSecret = oauthClientSecretProvider(),
               !clientSecret.isEmpty else {
+            clearPendingOAuthContext()
             userFacingError = "OAuth is not configured. Set GitHub OAuth credentials in environment."
             return
         }
 
         guard let expectedState = pendingOAuthState,
               let codeVerifier = pendingOAuthCodeVerifier else {
+            clearPendingOAuthContext()
             userFacingError = "Authentication failed. Please try signing in again."
             return
         }
