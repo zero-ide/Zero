@@ -39,6 +39,7 @@ struct ZeroApp: App {
         
         Settings {
             SettingsView()
+                .environmentObject(appState)
         }
     }
 }
