@@ -417,7 +417,10 @@ class AppState: ObservableObject {
 
     private func reconcileSelectedOrgContext() {
         if let currentOrg = selectedOrg,
-           organizations.contains(where: { $0.login == currentOrg.login }) {
+           let matchingCurrentOrg = organizations.first(where: { $0.login == currentOrg.login }) {
+            if currentOrg != matchingCurrentOrg {
+                setSelectedOrgWithoutPersisting(matchingCurrentOrg)
+            }
             return
         }
 

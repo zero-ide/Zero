@@ -5,18 +5,17 @@ import XCTest
 class AppStateTests: XCTestCase {
     
     var appState: AppState!
-    private let selectedOrgStorageKey = "com.zero.ide.last_selected_org_login"
     
     override func setUp() {
         super.setUp()
         // Clear keychain before test to ensure clean state
         try? KeychainHelper.standard.delete(service: "com.zero.ide", account: "github_token")
-        UserDefaults.standard.removeObject(forKey: selectedOrgStorageKey)
+        UserDefaults.standard.removeObject(forKey: Constants.Preferences.selectedOrgLogin)
         appState = AppState()
     }
     
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: selectedOrgStorageKey)
+        UserDefaults.standard.removeObject(forKey: Constants.Preferences.selectedOrgLogin)
         appState = nil
         super.tearDown()
     }
@@ -430,7 +429,7 @@ class AppStateTests: XCTestCase {
 
     func testFetchOrganizationsRestoresPreviouslySelectedOrgContext() async {
         // Given
-        UserDefaults.standard.set("zero-ide", forKey: selectedOrgStorageKey)
+        UserDefaults.standard.set("zero-ide", forKey: Constants.Preferences.selectedOrgLogin)
         appState.gitHubServiceFactory = { _ in
             MockGitHubService(
                 organizationsResult: [
@@ -450,7 +449,7 @@ class AppStateTests: XCTestCase {
 
     func testFetchOrganizationsFallsBackToPersonalWhenStoredOrgIsMissing() async {
         // Given
-        UserDefaults.standard.set("missing-org", forKey: selectedOrgStorageKey)
+        UserDefaults.standard.set("missing-org", forKey: Constants.Preferences.selectedOrgLogin)
         appState.selectedOrg = Organization(id: 99, login: "stale-org", avatarURL: nil, description: nil)
         appState.gitHubServiceFactory = { _ in
             MockGitHubService(
@@ -476,13 +475,13 @@ class AppStateTests: XCTestCase {
         appState.selectedOrg = org
 
         // Then
-        XCTAssertEqual(UserDefaults.standard.string(forKey: selectedOrgStorageKey), "zero-ide")
+        XCTAssertEqual(UserDefaults.standard.string(forKey: Constants.Preferences.selectedOrgLogin), "zero-ide")
 
         // When
         appState.selectedOrg = nil
 
         // Then
-        XCTAssertNil(UserDefaults.standard.string(forKey: selectedOrgStorageKey))
+        XCTAssertNil(UserDefaults.standard.string(forKey: Constants.Preferences.selectedOrgLogin))
     }
     
     func testSelectRepository() {
