@@ -5,6 +5,7 @@ struct RepoListView: View {
     @State private var searchText: String = ""
     @State private var showingLogoutConfirmation = false
     @State private var pendingDeleteSession: Session?
+    @State private var isInitialContextLoad = true
     
     var filteredRepos: [Repository] {
         if searchText.isEmpty {
@@ -40,6 +41,7 @@ struct RepoListView: View {
                         .labelsHidden()
                         .pickerStyle(.menu)
                         .onChange(of: appState.selectedOrg) { _, _ in
+                            guard !isInitialContextLoad else { return }
                             Task { await appState.fetchRepositories() }
                         }
                     }
@@ -136,8 +138,9 @@ struct RepoListView: View {
                 .foregroundStyle(.secondary)
         }
         .task {
-            await appState.fetchRepositories()
             await appState.fetchOrganizations()
+            isInitialContextLoad = false
+            await appState.fetchRepositories()
             await appState.loadSessionsWithHealthCheck()
         }
         .overlay {
