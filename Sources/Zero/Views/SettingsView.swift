@@ -7,6 +7,11 @@ struct SettingsView: View {
                 .tabItem {
                     Label("Build", systemImage: "hammer")
                 }
+
+            DiagnosticsView()
+                .tabItem {
+                    Label("Diagnostics", systemImage: "stethoscope")
+                }
             
             Text("General Settings")
                 .tabItem {
