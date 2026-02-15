@@ -330,6 +330,40 @@ class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.repositories.count, 2)
         XCTAssertEqual(appState.repositories.first?.name, "repo1")
     }
+
+    func testFetchRepositoriesAuthErrorForcesLogoutAndShowsReloginMessage() async {
+        // Given
+        appState.isLoggedIn = true
+        appState.accessToken = "gho_test_token"
+        appState.gitHubServiceFactory = { _ in
+            MockGitHubService(fetchReposError: GitHubServiceError.unauthorized)
+        }
+
+        // When
+        await appState.fetchRepositories()
+
+        // Then
+        XCTAssertFalse(appState.isLoggedIn)
+        XCTAssertNil(appState.accessToken)
+        XCTAssertEqual(appState.userFacingError, "Authentication expired. Please sign in again.")
+    }
+
+    func testFetchRepositoriesNonAuthErrorKeepsLoginState() async {
+        // Given
+        appState.isLoggedIn = true
+        appState.accessToken = "gho_test_token"
+        appState.gitHubServiceFactory = { _ in
+            MockGitHubService(fetchReposError: URLError(.timedOut))
+        }
+
+        // When
+        await appState.fetchRepositories()
+
+        // Then
+        XCTAssertTrue(appState.isLoggedIn)
+        XCTAssertEqual(appState.accessToken, "gho_test_token")
+        XCTAssertEqual(appState.userFacingError, "Failed to load repositories. Please check your token and network.")
+    }
     
     func testSelectRepository() {
         // Given
@@ -367,5 +401,22 @@ extension Repository {
             htmlURL: URL(string: "https://github.com/user/\(name)")!,
             cloneURL: URL(string: "https://github.com/user/\(name).git")!
         )
+    }
+}
+
+private final class MockGitHubService: GitHubService {
+    private let fetchReposError: Error?
+
+    init(fetchReposError: Error?) {
+        self.fetchReposError = fetchReposError
+        super.init(token: "gho_test_token")
+    }
+
+    override func fetchRepositories(page: Int = 1, type: String? = nil) async throws -> [Repository] {
+        if let fetchReposError {
+            throw fetchReposError
+        }
+
+        return []
     }
 }
