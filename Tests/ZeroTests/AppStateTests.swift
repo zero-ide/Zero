@@ -5,15 +5,18 @@ import XCTest
 class AppStateTests: XCTestCase {
     
     var appState: AppState!
+    private let selectedOrgStorageKey = "com.zero.ide.last_selected_org_login"
     
     override func setUp() {
         super.setUp()
         // Clear keychain before test to ensure clean state
         try? KeychainHelper.standard.delete(service: "com.zero.ide", account: "github_token")
+        UserDefaults.standard.removeObject(forKey: selectedOrgStorageKey)
         appState = AppState()
     }
     
     override func tearDown() {
+        UserDefaults.standard.removeObject(forKey: selectedOrgStorageKey)
         appState = nil
         super.tearDown()
     }
@@ -424,6 +427,63 @@ class AppStateTests: XCTestCase {
         XCTAssertFalse(appState.isLoadingMore)
         XCTAssertEqual(appState.userFacingError, "Authentication expired. Please sign in again.")
     }
+
+    func testFetchOrganizationsRestoresPreviouslySelectedOrgContext() async {
+        // Given
+        UserDefaults.standard.set("zero-ide", forKey: selectedOrgStorageKey)
+        appState.gitHubServiceFactory = { _ in
+            MockGitHubService(
+                organizationsResult: [
+                    Organization(id: 1, login: "zero-ide", avatarURL: nil, description: nil),
+                    Organization(id: 2, login: "another-org", avatarURL: nil, description: nil)
+                ]
+            )
+        }
+        appState.accessToken = "gho_test_token"
+
+        // When
+        await appState.fetchOrganizations()
+
+        // Then
+        XCTAssertEqual(appState.selectedOrg?.login, "zero-ide")
+    }
+
+    func testFetchOrganizationsFallsBackToPersonalWhenStoredOrgIsMissing() async {
+        // Given
+        UserDefaults.standard.set("missing-org", forKey: selectedOrgStorageKey)
+        appState.selectedOrg = Organization(id: 99, login: "stale-org", avatarURL: nil, description: nil)
+        appState.gitHubServiceFactory = { _ in
+            MockGitHubService(
+                organizationsResult: [
+                    Organization(id: 1, login: "zero-ide", avatarURL: nil, description: nil)
+                ]
+            )
+        }
+        appState.accessToken = "gho_test_token"
+
+        // When
+        await appState.fetchOrganizations()
+
+        // Then
+        XCTAssertNil(appState.selectedOrg)
+    }
+
+    func testSelectedOrgChangePersistsContextAndPersonalClearsStoredContext() {
+        // Given
+        let org = Organization(id: 1, login: "zero-ide", avatarURL: nil, description: nil)
+
+        // When
+        appState.selectedOrg = org
+
+        // Then
+        XCTAssertEqual(UserDefaults.standard.string(forKey: selectedOrgStorageKey), "zero-ide")
+
+        // When
+        appState.selectedOrg = nil
+
+        // Then
+        XCTAssertNil(UserDefaults.standard.string(forKey: selectedOrgStorageKey))
+    }
     
     func testSelectRepository() {
         // Given
@@ -468,15 +528,18 @@ private final class MockGitHubService: GitHubService {
     private let fetchReposError: Error?
     private let fetchOrgsError: Error?
     private let fetchOrgReposError: Error?
+    private let organizationsResult: [Organization]
 
     init(
         fetchReposError: Error? = nil,
         fetchOrgsError: Error? = nil,
-        fetchOrgReposError: Error? = nil
+        fetchOrgReposError: Error? = nil,
+        organizationsResult: [Organization] = []
     ) {
         self.fetchReposError = fetchReposError
         self.fetchOrgsError = fetchOrgsError
         self.fetchOrgReposError = fetchOrgReposError
+        self.organizationsResult = organizationsResult
         super.init(token: "gho_test_token")
     }
 
@@ -493,7 +556,7 @@ private final class MockGitHubService: GitHubService {
             throw fetchOrgsError
         }
 
-        return []
+        return organizationsResult
     }
 
     override func fetchOrgRepositories(org: String, page: Int = 1) async throws -> [Repository] {
