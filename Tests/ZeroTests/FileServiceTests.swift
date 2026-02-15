@@ -27,7 +27,44 @@ final class FileServiceTests: XCTestCase {
             XCTFail("Expected createDirectory to reject path traversal")
         } catch {
             // Then
-            XCTAssertTrue(docker.executedScripts.isEmpty)
+            XCTAssertTrue(docker.ensuredDirectories.isEmpty)
+            XCTAssertTrue(docker.writtenFiles.isEmpty)
+        }
+    }
+
+    func testCreateDirectoryCallsDockerEnsureDirectoryWithWorkspaceAbsolutePath() async throws {
+        // Given
+        let docker = MockFileOpsDockerService()
+        let service = FileService(containerName: "zero-dev", workspacePath: "/workspace", docker: docker)
+
+        // When
+        try await service.createDirectory(path: "src/features")
+
+        // Then
+        XCTAssertEqual(docker.ensuredDirectories.count, 1)
+        XCTAssertEqual(docker.ensuredDirectories.first, "/workspace/src/features")
+    }
+
+    func testCreateFileRejectsPathOutsideWorkspace() async {
+        // Given
+        let docker = MockFileOpsDockerService()
+        let service = FileService(containerName: "zero-dev", workspacePath: "/workspace", docker: docker)
+
+        // When
+        do {
+            try await service.createFile(path: "../etc/passwd", initialContent: "")
+            XCTFail("Expected createFile to reject traversal path")
+        } catch {
+            // Then
+            XCTAssertTrue(docker.writtenFiles.isEmpty)
+        }
+
+        do {
+            try await service.createFile(path: "/etc/passwd", initialContent: "")
+            XCTFail("Expected createFile to reject absolute outside workspace path")
+        } catch {
+            // Then
+            XCTAssertTrue(docker.writtenFiles.isEmpty)
         }
     }
 
@@ -60,6 +97,21 @@ final class FileServiceTests: XCTestCase {
         }
     }
 
+    func testRenameItemRejectsSourceOutsideWorkspace() async {
+        // Given
+        let docker = MockFileOpsDockerService()
+        let service = FileService(containerName: "zero-dev", workspacePath: "/workspace", docker: docker)
+
+        // When
+        do {
+            try await service.renameItem(at: "../old.swift", to: "src/new.swift")
+            XCTFail("Expected renameItem to reject source path traversal")
+        } catch {
+            // Then
+            XCTAssertTrue(docker.renameCalls.isEmpty)
+        }
+    }
+
     func testDeleteItemUsesRecursiveFlag() async throws {
         // Given
         let docker = MockFileOpsDockerService()
@@ -72,6 +124,20 @@ final class FileServiceTests: XCTestCase {
         XCTAssertEqual(docker.removeCalls.count, 1)
         XCTAssertEqual(docker.removeCalls.first?.path, "/workspace/build")
         XCTAssertEqual(docker.removeCalls.first?.recursive, true)
+    }
+
+    func testDeleteItemUsesNonRecursiveFlag() async throws {
+        // Given
+        let docker = MockFileOpsDockerService()
+        let service = FileService(containerName: "zero-dev", workspacePath: "/workspace", docker: docker)
+
+        // When
+        try await service.deleteItem(at: "tmp.txt", recursive: false)
+
+        // Then
+        XCTAssertEqual(docker.removeCalls.count, 1)
+        XCTAssertEqual(docker.removeCalls.first?.path, "/workspace/tmp.txt")
+        XCTAssertEqual(docker.removeCalls.first?.recursive, false)
     }
 
     func testDeleteItemRejectsPathOutsideWorkspace() async {
