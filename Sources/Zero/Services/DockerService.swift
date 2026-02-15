@@ -65,12 +65,20 @@ struct DockerService: DockerServiceProtocol {
     /// 쉘 스크립트 실행 (sh -c 사용)
     func executeShell(container: String, script: String) throws -> String {
         let args = ["exec", container, "sh", "-c", script]
-        return try runner.execute(command: dockerPath, arguments: args)
+        do {
+            return try runner.execute(command: dockerPath, arguments: args)
+        } catch {
+            throw mapRuntimeError(error, command: script, context: "Docker shell command failed.")
+        }
     }
 
     func executeShellStreaming(container: String, script: String, onOutput: @escaping (String) -> Void) throws -> String {
         let args = ["exec", container, "sh", "-c", script]
-        return try runner.executeStreaming(command: dockerPath, arguments: args, onOutput: onOutput)
+        do {
+            return try runner.executeStreaming(command: dockerPath, arguments: args, onOutput: onOutput)
+        } catch {
+            throw mapRuntimeError(error, command: script, context: "Docker shell command failed.")
+        }
     }
     
     /// 디렉토리 파일 목록 조회
@@ -141,5 +149,19 @@ struct DockerService: DockerServiceProtocol {
     private func quotedPath(_ path: String) -> String {
         let escaped = path.replacingOccurrences(of: "'", with: "'\\''")
         return "'\(escaped)'"
+    }
+
+    private func mapRuntimeError(_ error: Error, command: String, context: String) -> ZeroError {
+        if let zeroError = error as? ZeroError {
+            return zeroError
+        }
+
+        if case let CommandRunnerError.commandFailed(binary, arguments, exitCode, output) = error {
+            let debugDetails = "\(context) [binary=\(binary)] [args=\(arguments.joined(separator: " "))] [script=\(command)] [exit=\(exitCode)] [output=\(output)]"
+            return .runtimeCommandFailed(userMessage: context, debugDetails: debugDetails)
+        }
+
+        let debugDetails = "\(context) [script=\(command)] [error=\(error.localizedDescription)]"
+        return .runtimeCommandFailed(userMessage: context, debugDetails: debugDetails)
     }
 }

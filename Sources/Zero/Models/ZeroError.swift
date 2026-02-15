@@ -41,6 +41,7 @@ enum ZeroError: Error, Equatable {
     case keychainDeleteFailed
     
     // MARK: - General Errors
+    case runtimeCommandFailed(userMessage: String, debugDetails: String)
     case unknown(message: String)
     case notImplemented
     
@@ -120,6 +121,9 @@ enum ZeroError: Error, Equatable {
         case .keychainDeleteFailed:
             return "키체인 삭제 실패"
             
+        case .runtimeCommandFailed(let userMessage, _):
+            return userMessage
+
         case .unknown(let message):
             return "알 수 없는 오류: \(message)"
             
@@ -141,7 +145,7 @@ enum ZeroError: Error, Equatable {
         case .githubRateLimited:
             return "잠시 후에 다시 시도하세요."
             
-        case .containerExecutionFailed:
+        case .containerExecutionFailed, .runtimeCommandFailed:
             return "컨테이너 상태를 확인하고 다시 시도하세요."
             
         default:

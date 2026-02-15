@@ -14,7 +14,14 @@ class ErrorHandlingTests: XCTestCase {
         
         // When & Then
         XCTAssertThrowsError(try service.executeShell(container: "invalid", script: "ls")) { error in
-            XCTAssertTrue(error.localizedDescription.contains("not found") || error.localizedDescription.contains("Docker"))
+            guard let zeroError = error as? ZeroError,
+                  case let .runtimeCommandFailed(userMessage, debugDetails) = zeroError else {
+                XCTFail("Expected ZeroError.runtimeCommandFailed")
+                return
+            }
+
+            XCTAssertEqual(userMessage, "Docker shell command failed.")
+            XCTAssertTrue(debugDetails.contains("container not found"))
         }
     }
     
