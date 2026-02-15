@@ -52,6 +52,33 @@ struct DiagnosticsView: View {
                     .foregroundStyle(exportMessage.hasPrefix("Failed") ? Color.red : Color.secondary)
             }
 
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle("Enable lightweight telemetry", isOn: $appState.telemetryOptIn)
+
+                let summary = appState.executionService.telemetrySummary
+                Text("Success Rate: \(formatPercent(summary.successRate))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Average Runtime: \(formatDuration(summary.averageDurationSeconds))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if summary.topErrorCodes.isEmpty {
+                    Text("Top Error Codes: none")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(summary.topErrorCodes) { metric in
+                        Text("Error: \(metric.code) (\(metric.count))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(12)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .cornerRadius(8)
+
             if let snapshot {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Docker")
@@ -177,6 +204,14 @@ struct DiagnosticsView: View {
                 }
             }
         }
+    }
+
+    private func formatPercent(_ value: Double) -> String {
+        String(format: "%.1f%%", value * 100)
+    }
+
+    private func formatDuration(_ value: TimeInterval) -> String {
+        String(format: "%.2fs", value)
     }
 }
 
