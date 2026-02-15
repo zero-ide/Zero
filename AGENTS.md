@@ -31,7 +31,7 @@ Run from repository root: `/Users/seungwon/Documents/Zero`
 
 - Debug build: `swift build`
 - Release build: `swift build -c release`
-- Release build (arm64, used by DMG script): `swift build -c release --arch arm64`
+- Release build (explicit arch example): `swift build -c release --arch arm64`
 
 ### Run App
 
@@ -63,8 +63,9 @@ Notes:
 
 Packaging caveats:
 
-- Script assumes arm64 build output path.
-- Script references a machine-local icon source path; packaging may warn/fallback.
+- Script auto-detects host arch (`arm64`/`x86_64`) and builds matching release output.
+- Script defaults icon source to `Sources/Zero/Resources/AppIcon.iconset/icon_1024x1024.png` and can package without a custom icon when unavailable.
+- Optional overrides are available via env vars: `ZERO_DMG_ARCH`, `ZERO_DMG_BUILD_DIR`, `ZERO_ICON_SOURCE`, `ZERO_DMG_DRY_RUN`.
 - Script writes `Zero.entitlements` during execution.
 
 ## Lint / Formatting / Static Analysis
