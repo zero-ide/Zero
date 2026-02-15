@@ -364,6 +364,49 @@ class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.accessToken, "gho_test_token")
         XCTAssertEqual(appState.userFacingError, "Failed to load repositories. Please check your token and network.")
     }
+
+    func testFetchOrganizationsAuthErrorForcesLogoutAndClearsSelection() async {
+        // Given
+        appState.isLoggedIn = true
+        appState.accessToken = "gho_test_token"
+        appState.organizations = [Organization(id: 1, login: "zero-ide", avatarURL: nil, description: nil)]
+        appState.selectedOrg = appState.organizations.first
+        appState.gitHubServiceFactory = { _ in
+            MockGitHubService(fetchOrgsError: GitHubServiceError.forbidden)
+        }
+
+        // When
+        await appState.fetchOrganizations()
+
+        // Then
+        XCTAssertFalse(appState.isLoggedIn)
+        XCTAssertNil(appState.accessToken)
+        XCTAssertTrue(appState.organizations.isEmpty)
+        XCTAssertNil(appState.selectedOrg)
+        XCTAssertEqual(appState.userFacingError, "Authentication expired. Please sign in again.")
+    }
+
+    func testLoadMoreRepositoriesAuthErrorForcesLogoutAndStopsPagination() async {
+        // Given
+        appState.isLoggedIn = true
+        appState.accessToken = "gho_test_token"
+        appState.repositories = [Repository.mock(id: 1, name: "repo1")]
+        appState.currentPage = 1
+        appState.hasMoreRepos = true
+        appState.gitHubServiceFactory = { _ in
+            MockGitHubService(fetchReposError: GitHubServiceError.unauthorized)
+        }
+
+        // When
+        await appState.loadMoreRepositories()
+
+        // Then
+        XCTAssertFalse(appState.isLoggedIn)
+        XCTAssertNil(appState.accessToken)
+        XCTAssertFalse(appState.hasMoreRepos)
+        XCTAssertFalse(appState.isLoadingMore)
+        XCTAssertEqual(appState.userFacingError, "Authentication expired. Please sign in again.")
+    }
     
     func testSelectRepository() {
         // Given
@@ -406,15 +449,39 @@ extension Repository {
 
 private final class MockGitHubService: GitHubService {
     private let fetchReposError: Error?
+    private let fetchOrgsError: Error?
+    private let fetchOrgReposError: Error?
 
-    init(fetchReposError: Error?) {
+    init(
+        fetchReposError: Error? = nil,
+        fetchOrgsError: Error? = nil,
+        fetchOrgReposError: Error? = nil
+    ) {
         self.fetchReposError = fetchReposError
+        self.fetchOrgsError = fetchOrgsError
+        self.fetchOrgReposError = fetchOrgReposError
         super.init(token: "gho_test_token")
     }
 
     override func fetchRepositories(page: Int = 1, type: String? = nil) async throws -> [Repository] {
         if let fetchReposError {
             throw fetchReposError
+        }
+
+        return []
+    }
+
+    override func fetchOrganizations() async throws -> [Organization] {
+        if let fetchOrgsError {
+            throw fetchOrgsError
+        }
+
+        return []
+    }
+
+    override func fetchOrgRepositories(org: String, page: Int = 1) async throws -> [Repository] {
+        if let fetchOrgReposError {
+            throw fetchOrgReposError
         }
 
         return []
