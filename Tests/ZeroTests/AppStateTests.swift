@@ -49,6 +49,62 @@ class AppStateTests: XCTestCase {
         // Then
         XCTAssertFalse(appState.isLoggedIn)
     }
+
+    func testBeginOAuthLoginReturnsAuthorizeURLAndStoresPendingState() throws {
+        // Given
+        appState.oauthClientIDProvider = { "client-id" }
+        appState.oauthClientSecretProvider = { "client-secret" }
+        appState.oauthRedirectURIProvider = { "zero://auth/callback" }
+
+        // When
+        let url = try appState.beginOAuthLogin()
+
+        // Then
+        XCTAssertTrue(url.absoluteString.starts(with: "https://github.com/login/oauth/authorize"))
+        XCTAssertNotNil(appState.pendingOAuthStateForTesting)
+        XCTAssertNotNil(appState.pendingOAuthCodeVerifierForTesting)
+    }
+
+    func testHandleOAuthCallbackWithStateMismatchShowsError() async {
+        // Given
+        appState.oauthClientIDProvider = { "client-id" }
+        appState.oauthClientSecretProvider = { "client-secret" }
+        appState.oauthRedirectURIProvider = { "zero://auth/callback" }
+        _ = try? appState.beginOAuthLogin()
+        let callback = URL(string: "zero://auth/callback?code=code-1&state=wrong-state")!
+
+        // When
+        await appState.handleOAuthCallback(callback)
+
+        // Then
+        XCTAssertFalse(appState.isLoggedIn)
+        XCTAssertEqual(appState.userFacingError, "Authentication failed. Please try signing in again.")
+    }
+
+    func testHandleOAuthCallbackSuccessStoresTokenAndLogsIn() async {
+        // Given
+        appState.oauthClientIDProvider = { "client-id" }
+        appState.oauthClientSecretProvider = { "client-secret" }
+        appState.oauthRedirectURIProvider = { "zero://auth/callback" }
+        appState.oauthTokenExchanger = { _ in "gho_test_token" }
+
+        guard let loginURL = try? appState.beginOAuthLogin(),
+              let loginComponents = URLComponents(url: loginURL, resolvingAgainstBaseURL: false),
+              let expectedState = loginComponents.queryItems?.first(where: { $0.name == "state" })?.value else {
+            XCTFail("Failed to prepare OAuth login context")
+            return
+        }
+
+        let callback = URL(string: "zero://auth/callback?code=code-1&state=\(expectedState)")!
+
+        // When
+        await appState.handleOAuthCallback(callback)
+
+        // Then
+        XCTAssertTrue(appState.isLoggedIn)
+        XCTAssertEqual(appState.accessToken, "gho_test_token")
+        XCTAssertNil(appState.userFacingError)
+    }
     
     // MARK: - Editor State Tests
     

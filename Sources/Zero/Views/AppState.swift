@@ -38,6 +38,40 @@ class AppState: ObservableObject {
     var sessionContainerHealthCheck: (Session) async -> Bool
     var persistedSessionLoader: () throws -> [Session]
     var persistedSessionDeleter: (Session) throws -> Void
+
+    var oauthClientIDProvider: () -> String? = {
+        ProcessInfo.processInfo.environment["GITHUB_OAUTH_CLIENT_ID"] ??
+        ProcessInfo.processInfo.environment["GITHUB_CLIENT_ID"]
+    }
+    var oauthClientSecretProvider: () -> String? = {
+        ProcessInfo.processInfo.environment["GITHUB_OAUTH_CLIENT_SECRET"] ??
+        ProcessInfo.processInfo.environment["GITHUB_CLIENT_SECRET"]
+    }
+    var oauthRedirectURIProvider: () -> String = {
+        ProcessInfo.processInfo.environment["GITHUB_OAUTH_REDIRECT_URI"] ?? "zero://auth/callback"
+    }
+    var oauthTokenExchanger: (URLRequest) async throws -> String = { request in
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        let tokenResponse = try JSONDecoder().decode(OAuthTokenResponse.self, from: data)
+        return tokenResponse.accessToken
+    }
+
+    private var pendingOAuthState: String?
+    private var pendingOAuthCodeVerifier: String?
+
+    var pendingOAuthStateForTesting: String? {
+        pendingOAuthState
+    }
+
+    var pendingOAuthCodeVerifierForTesting: String? {
+        pendingOAuthCodeVerifier
+    }
     
     init() {
         let docker = DockerService()
@@ -81,6 +115,67 @@ class AppState: ObservableObject {
         self.accessToken = nil
         self.isLoggedIn = false
         self.repositories = []
+    }
+
+    func beginOAuthLogin() throws -> URL {
+        guard let clientID = oauthClientIDProvider(), !clientID.isEmpty else {
+            throw OAuthFlowError.missingConfiguration
+        }
+
+        let authManager = AuthManager(clientID: clientID, scope: "repo")
+        let context = authManager.createAuthorizationContext()
+        let redirectURI = oauthRedirectURIProvider()
+
+        pendingOAuthState = context.state
+        pendingOAuthCodeVerifier = context.codeVerifier
+        userFacingError = nil
+
+        return authManager.getLoginURL(
+            state: context.state,
+            codeChallenge: context.codeChallenge,
+            redirectURI: redirectURI
+        )
+    }
+
+    func handleOAuthCallback(_ url: URL) async {
+        guard let clientID = oauthClientIDProvider(),
+              !clientID.isEmpty,
+              let clientSecret = oauthClientSecretProvider(),
+              !clientSecret.isEmpty else {
+            userFacingError = "OAuth is not configured. Set GitHub OAuth credentials in environment."
+            return
+        }
+
+        guard let expectedState = pendingOAuthState,
+              let codeVerifier = pendingOAuthCodeVerifier else {
+            userFacingError = "Authentication failed. Please try signing in again."
+            return
+        }
+
+        let authManager = AuthManager(clientID: clientID, scope: "repo")
+        guard let response = authManager.extractAuthorizationResponse(from: url),
+              authManager.isValidCallbackState(expected: expectedState, actual: response.state) else {
+            clearPendingOAuthContext()
+            userFacingError = "Authentication failed. Please try signing in again."
+            return
+        }
+
+        do {
+            let request = try authManager.createTokenExchangeRequest(
+                code: response.code,
+                clientSecret: clientSecret,
+                codeVerifier: codeVerifier,
+                redirectURI: oauthRedirectURIProvider()
+            )
+
+            let token = try await oauthTokenExchanger(request)
+            try login(with: token)
+            clearPendingOAuthContext()
+            userFacingError = nil
+        } catch {
+            clearPendingOAuthContext()
+            userFacingError = "GitHub sign in failed. Please try again."
+        }
     }
     
     func fetchOrganizations() async {
@@ -277,5 +372,29 @@ class AppState: ObservableObject {
         }
 
         return "Starting..."
+    }
+
+    private func clearPendingOAuthContext() {
+        pendingOAuthState = nil
+        pendingOAuthCodeVerifier = nil
+    }
+}
+
+private struct OAuthTokenResponse: Decodable {
+    let accessToken: String
+
+    enum CodingKeys: String, CodingKey {
+        case accessToken = "access_token"
+    }
+}
+
+private enum OAuthFlowError: LocalizedError {
+    case missingConfiguration
+
+    var errorDescription: String? {
+        switch self {
+        case .missingConfiguration:
+            return "OAuth is not configured. Set GitHub OAuth credentials in environment."
+        }
     }
 }
