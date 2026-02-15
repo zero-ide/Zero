@@ -231,6 +231,57 @@ final class ExecutionServiceTests: XCTestCase {
         XCTAssertTrue(service.output.contains("❌ Error: Docker shell command failed."))
     }
 
+    func testRunRetriesPackageInstallAfterTransientFailure() async {
+        // Given
+        mockDocker.scriptedShellResults = [
+            .failure(ZeroError.runtimeCommandFailed(userMessage: "Docker shell command timed out.", debugDetails: "attempt 1 timeout")),
+            .success(""),
+            .success("run ok")
+        ]
+
+        // When
+        await service.run(container: "test-container", command: "npm start")
+
+        // Then
+        XCTAssertEqual(service.status, .success)
+        XCTAssertTrue(service.output.contains("Retrying Node.js installation (attempt 2/3)"))
+
+        let installCommands = mockDocker.executedShellScripts.filter { $0.contains("apk add --no-cache nodejs npm") }
+        XCTAssertEqual(installCommands.count, 2)
+    }
+
+    func testRunFailsWhenPackageInstallRetriesExhausted() async {
+        // Given
+        mockDocker.scriptedShellResults = [
+            .failure(ZeroError.runtimeCommandFailed(userMessage: "Docker shell command timed out.", debugDetails: "attempt 1 timeout")),
+            .failure(ZeroError.runtimeCommandFailed(userMessage: "Docker shell command timed out.", debugDetails: "attempt 2 timeout")),
+            .failure(ZeroError.runtimeCommandFailed(userMessage: "Docker shell command timed out.", debugDetails: "attempt 3 timeout"))
+        ]
+
+        // When
+        await service.run(container: "test-container", command: "npm start")
+
+        // Then
+        XCTAssertEqual(service.status, .failed("Failed to install Node.js after 3 attempts."))
+        XCTAssertTrue(service.output.contains("❌ Error: Failed to install Node.js after 3 attempts."))
+    }
+
+    func testRunWrapsPackageInstallWithTimeoutPolicy() async {
+        // Given
+        mockDocker.scriptedShellResults = [.success(""), .success("run ok")]
+
+        // When
+        await service.run(container: "test-container", command: "npm start")
+
+        // Then
+        guard let installScript = mockDocker.executedShellScripts.first(where: { $0.contains("apk add --no-cache nodejs npm") }) else {
+            XCTFail("Expected Node.js install command to run")
+            return
+        }
+
+        XCTAssertTrue(installScript.contains("timeout 20 sh -lc"))
+    }
+
     func testSaveAndLoadRunProfileCommand() throws {
         // Given
         let repositoryURL = URL(string: "https://github.com/zero-ide/Zero.git")!
@@ -319,6 +370,8 @@ class MockExecutionDockerService: DockerServiceProtocol {
     var interChunkDelayNanoseconds: UInt64 = 0
     var dockerCommandAvailable = true
     var executionError: Error?
+    var scriptedShellResults: [Result<String, Error>] = []
+    var executedShellScripts: [String] = []
     
     func checkInstallation() throws -> Bool { return true }
     
@@ -334,6 +387,18 @@ class MockExecutionDockerService: DockerServiceProtocol {
     func runContainer(image: String, name: String) throws -> String { return "" }
     func executeCommand(container: String, command: String) throws -> String { return "" }
     func executeShell(container: String, script: String) throws -> String {
+        executedShellScripts.append(script)
+
+        if !scriptedShellResults.isEmpty {
+            let nextResult = scriptedShellResults.removeFirst()
+            switch nextResult {
+            case .success(let output):
+                return output
+            case .failure(let error):
+                throw error
+            }
+        }
+
         if let executionError {
             throw executionError
         }
