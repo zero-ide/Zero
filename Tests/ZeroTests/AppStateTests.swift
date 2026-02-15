@@ -11,11 +11,13 @@ class AppStateTests: XCTestCase {
         // Clear keychain before test to ensure clean state
         try? KeychainHelper.standard.delete(service: "com.zero.ide", account: "github_token")
         UserDefaults.standard.removeObject(forKey: Constants.Preferences.selectedOrgLogin)
+        UserDefaults.standard.removeObject(forKey: Constants.Preferences.telemetryOptIn)
         appState = AppState()
     }
     
     override func tearDown() {
         UserDefaults.standard.removeObject(forKey: Constants.Preferences.selectedOrgLogin)
+        UserDefaults.standard.removeObject(forKey: Constants.Preferences.telemetryOptIn)
         appState = nil
         super.tearDown()
     }
@@ -494,6 +496,24 @@ class AppStateTests: XCTestCase {
         
         // Then
         XCTAssertEqual(selectedName, "selected-repo")
+    }
+
+    func testTelemetryOptInPersistsAcrossAppStateInstances() {
+        // Given
+        appState.telemetryOptIn = true
+
+        // When
+        let reloadedState = AppState()
+
+        // Then
+        XCTAssertTrue(reloadedState.telemetryOptIn)
+
+        // When
+        reloadedState.telemetryOptIn = false
+        let reloadedAgain = AppState()
+
+        // Then
+        XCTAssertFalse(reloadedAgain.telemetryOptIn)
     }
 }
 

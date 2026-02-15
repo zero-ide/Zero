@@ -22,6 +22,13 @@ class AppState: ObservableObject {
             persistSelectedOrgContextIfNeeded()
         }
     }
+
+    @Published var telemetryOptIn: Bool = false {
+        didSet {
+            persistTelemetryOptInIfNeeded()
+            executionService.telemetryEnabled = telemetryOptIn
+        }
+    }
     
     // 페이지 크기 (테스트 시 조정 가능)
     var pageSize: Int = Constants.GitHub.pageSize
@@ -70,6 +77,7 @@ class AppState: ObservableObject {
     private var pendingOAuthCodeVerifier: String?
     private var pendingOAuthRedirectURI: String?
     private var shouldPersistSelectedOrgContext = true
+    private var shouldPersistTelemetryOptIn = true
 
     var pendingOAuthStateForTesting: String? {
         pendingOAuthState
@@ -94,6 +102,12 @@ class AppState: ObservableObject {
         self.persistedSessionDeleter = { session in
             try manager.deleteSession(session)
         }
+
+        let storedTelemetryOptIn = UserDefaults.standard.bool(forKey: Constants.Preferences.telemetryOptIn)
+        shouldPersistTelemetryOptIn = false
+        telemetryOptIn = storedTelemetryOptIn
+        shouldPersistTelemetryOptIn = true
+        executionService.telemetryEnabled = storedTelemetryOptIn
         
         checkLoginStatus()
     }
@@ -414,6 +428,11 @@ class AppState: ObservableObject {
         shouldPersistSelectedOrgContext = false
         selectedOrg = org
         shouldPersistSelectedOrgContext = true
+    }
+
+    private func persistTelemetryOptInIfNeeded() {
+        guard shouldPersistTelemetryOptIn else { return }
+        UserDefaults.standard.set(telemetryOptIn, forKey: Constants.Preferences.telemetryOptIn)
     }
 
     private func reconcileSelectedOrgContext() {

@@ -24,5 +24,6 @@ enum Constants {
 
     enum Preferences {
         static let selectedOrgLogin = "com.zero.ide.last_selected_org_login"
+        static let telemetryOptIn = "com.zero.ide.telemetry_opt_in"
     }
 }
