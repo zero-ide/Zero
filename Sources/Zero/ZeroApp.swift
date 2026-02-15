@@ -23,6 +23,11 @@ struct ZeroApp: App {
                 }
             }
             .environmentObject(appState)
+            .onOpenURL { url in
+                Task {
+                    await appState.handleOAuthCallback(url)
+                }
+            }
             .onAppear {
                 // 앱을 regular 앱으로 등록 (Dock 아이콘, 메뉴�을, 키보드 입력 활성화)
                 NSApplication.shared.setActivationPolicy(.regular)
