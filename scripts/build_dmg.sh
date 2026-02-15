@@ -1,58 +1,134 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 APP_NAME="Zero"
-# SwiftPM 빌드 경로는 아키텍처에 따라 다를 수 있음
-BUILD_DIR=".build/arm64-apple-macosx/release"
 APP_BUNDLE="$APP_NAME.app"
 DMG_NAME="$APP_NAME.dmg"
+RESOURCES_DIR="Sources/Zero/Resources"
+DEFAULT_ICON_SOURCE="$RESOURCES_DIR/AppIcon.iconset/icon_1024x1024.png"
+ENTITLEMENTS_FILE="Zero.entitlements"
 
-# 1. Build
-echo "🏗️  Building $APP_NAME (Release)..."
-swift build -c release --arch arm64
+log() {
+    printf "%s\n" "$1"
+}
 
-# 2. Create .app bundle
-echo "📦 Creating $APP_BUNDLE..."
+warn() {
+    printf "⚠️ %s\n" "$1"
+}
+
+die() {
+    printf "❌ %s\n" "$1" >&2
+    exit 1
+}
+
+require_tool() {
+    local tool="$1"
+    local hint="$2"
+
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        die "Required tool '$tool' is missing. $hint"
+    fi
+}
+
+normalize_arch() {
+    local arch="$1"
+
+    case "$arch" in
+        arm64|aarch64)
+            printf "arm64"
+            ;;
+        x86_64|amd64)
+            printf "x86_64"
+            ;;
+        *)
+            die "Unsupported architecture '$arch'. Set ZERO_DMG_ARCH to arm64 or x86_64."
+            ;;
+    esac
+}
+
+resolve_arch() {
+    if [ -n "${ZERO_DMG_ARCH:-}" ]; then
+        normalize_arch "$ZERO_DMG_ARCH"
+        return
+    fi
+
+    normalize_arch "$(uname -m)"
+}
+
+if [ "$(uname -s)" != "Darwin" ]; then
+    die "DMG packaging is only supported on macOS."
+fi
+
+require_tool swift "Install Xcode Command Line Tools with: xcode-select --install"
+require_tool hdiutil "Run this script on macOS where hdiutil is available."
+require_tool codesign "Install Xcode Command Line Tools with: xcode-select --install"
+
+ARCH="$(resolve_arch)"
+BUILD_DIR="${ZERO_DMG_BUILD_DIR:-.build/${ARCH}-apple-macosx/release}"
+BINARY_PATH="$BUILD_DIR/$APP_NAME"
+ICON_SOURCE="${ZERO_ICON_SOURCE:-$DEFAULT_ICON_SOURCE}"
+HAS_ICON="0"
+
+if [ "${ZERO_DMG_DRY_RUN:-0}" = "1" ]; then
+    printf "dry_run=1\n"
+    printf "arch=%s\n" "$ARCH"
+    printf "build_dir=%s\n" "$BUILD_DIR"
+    printf "icon_source=%s\n" "$ICON_SOURCE"
+    exit 0
+fi
+
+log "🏗️  Building $APP_NAME (Release, arch=$ARCH)..."
+swift build -c release --arch "$ARCH"
+
+log "📦 Creating $APP_BUNDLE..."
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
 
-# 실행 파일 복사
-if [ -f "$BUILD_DIR/$APP_NAME" ]; then
-    cp "$BUILD_DIR/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/"
-else
-    echo "Error: Binary not found at $BUILD_DIR/$APP_NAME"
-    exit 1
+if [ ! -f "$BINARY_PATH" ]; then
+    die "Binary not found at '$BINARY_PATH'. Check build output and ZERO_DMG_BUILD_DIR."
+fi
+cp "$BINARY_PATH" "$APP_BUNDLE/Contents/MacOS/"
+
+log "📂 Copying resources..."
+if compgen -G "$BUILD_DIR/*.bundle" >/dev/null; then
+    cp -R "$BUILD_DIR"/*.bundle "$APP_BUNDLE/Contents/Resources/"
 fi
 
-# 리소스 번들 복사 (Highlightr 등)
-echo "📂 Copying resources..."
-cp -r "$BUILD_DIR"/*.bundle "$APP_BUNDLE/Contents/Resources/" 2>/dev/null || true
-
-# 아이콘 생성 및 복사
-ICON_SOURCE="/Users/ktown4u/.clawdbot/media/inbound/d18e0e5c-6879-461a-b9ac-9718ea99481c.png"
 if [ -f "$ICON_SOURCE" ]; then
-    echo "🎨 Creating AppIcon.icns..."
-    mkdir -p AppIcon.iconset
-    sips -z 16 16     "$ICON_SOURCE" --out AppIcon.iconset/icon_16x16.png > /dev/null
-    sips -z 32 32     "$ICON_SOURCE" --out AppIcon.iconset/icon_16x16@2x.png > /dev/null
-    sips -z 32 32     "$ICON_SOURCE" --out AppIcon.iconset/icon_32x32.png > /dev/null
-    sips -z 64 64     "$ICON_SOURCE" --out AppIcon.iconset/icon_32x32@2x.png > /dev/null
-    sips -z 128 128   "$ICON_SOURCE" --out AppIcon.iconset/icon_128x128.png > /dev/null
-    sips -z 256 256   "$ICON_SOURCE" --out AppIcon.iconset/icon_128x128@2x.png > /dev/null
-    sips -z 256 256   "$ICON_SOURCE" --out AppIcon.iconset/icon_256x256.png > /dev/null
-    sips -z 512 512   "$ICON_SOURCE" --out AppIcon.iconset/icon_256x256@2x.png > /dev/null
-    sips -z 512 512   "$ICON_SOURCE" --out AppIcon.iconset/icon_512x512.png > /dev/null
-    sips -z 1024 1024 "$ICON_SOURCE" --out AppIcon.iconset/icon_512x512@2x.png > /dev/null
-    
-    iconutil -c icns AppIcon.iconset
-    cp AppIcon.icns "$APP_BUNDLE/Contents/Resources/"
-    rm -rf AppIcon.iconset AppIcon.icns
+    if command -v sips >/dev/null 2>&1 && command -v iconutil >/dev/null 2>&1; then
+        log "🎨 Creating AppIcon.icns from $ICON_SOURCE..."
+        rm -rf AppIcon.iconset AppIcon.icns
+        mkdir -p AppIcon.iconset
+
+        sips -z 16 16 "$ICON_SOURCE" --out AppIcon.iconset/icon_16x16.png >/dev/null
+        sips -z 32 32 "$ICON_SOURCE" --out AppIcon.iconset/icon_16x16@2x.png >/dev/null
+        sips -z 32 32 "$ICON_SOURCE" --out AppIcon.iconset/icon_32x32.png >/dev/null
+        sips -z 64 64 "$ICON_SOURCE" --out AppIcon.iconset/icon_32x32@2x.png >/dev/null
+        sips -z 128 128 "$ICON_SOURCE" --out AppIcon.iconset/icon_128x128.png >/dev/null
+        sips -z 256 256 "$ICON_SOURCE" --out AppIcon.iconset/icon_128x128@2x.png >/dev/null
+        sips -z 256 256 "$ICON_SOURCE" --out AppIcon.iconset/icon_256x256.png >/dev/null
+        sips -z 512 512 "$ICON_SOURCE" --out AppIcon.iconset/icon_256x256@2x.png >/dev/null
+        sips -z 512 512 "$ICON_SOURCE" --out AppIcon.iconset/icon_512x512.png >/dev/null
+        sips -z 1024 1024 "$ICON_SOURCE" --out AppIcon.iconset/icon_512x512@2x.png >/dev/null
+
+        iconutil -c icns AppIcon.iconset
+        cp AppIcon.icns "$APP_BUNDLE/Contents/Resources/"
+        rm -rf AppIcon.iconset AppIcon.icns
+        HAS_ICON="1"
+    else
+        warn "Skipping icon generation because 'sips' or 'iconutil' is unavailable."
+    fi
 else
-    echo "⚠️ Warning: Icon source not found at $ICON_SOURCE"
+    warn "Icon source not found at '$ICON_SOURCE'. Packaging without a custom icon."
 fi
 
-# Info.plist 생성 (앱 실행 필수)
+ICON_PLIST_SECTION=""
+if [ "$HAS_ICON" = "1" ]; then
+    ICON_PLIST_SECTION="    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>"
+fi
+
 cat > "$APP_BUNDLE/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -60,8 +136,7 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<EOF
 <dict>
     <key>CFBundleExecutable</key>
     <string>$APP_NAME</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
+$ICON_PLIST_SECTION
     <key>CFBundleIdentifier</key>
     <string>com.zero.ide</string>
     <key>CFBundleName</key>
@@ -95,8 +170,7 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<EOF
 </plist>
 EOF
 
-# Entitlements 생성 (권한 부여)
-cat > "Zero.entitlements" <<EOF
+cat > "$ENTITLEMENTS_FILE" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -111,14 +185,12 @@ cat > "Zero.entitlements" <<EOF
 </plist>
 EOF
 
-# Code Signing (Ad-hoc + Entitlements)
-echo "🔏 Signing app with entitlements..."
-codesign --force --deep --sign - --entitlements "Zero.entitlements" "$APP_BUNDLE"
+log "🔏 Signing app with entitlements..."
+codesign --force --deep --sign - --entitlements "$ENTITLEMENTS_FILE" "$APP_BUNDLE"
 
-# 3. Create DMG
-echo "💿 Creating $DMG_NAME..."
+log "💿 Creating $DMG_NAME..."
 rm -f "$DMG_NAME"
 hdiutil create -volname "$APP_NAME" -srcfolder "$APP_BUNDLE" -ov -format UDZO "$DMG_NAME"
 
-echo "✅ Done! Created $DMG_NAME"
-echo "👉 You can now upload this file to GitHub Releases."
+log "✅ Done! Created $DMG_NAME"
+log "👉 You can now upload this file to GitHub Releases."
