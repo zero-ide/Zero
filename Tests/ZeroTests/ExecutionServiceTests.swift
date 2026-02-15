@@ -216,6 +216,21 @@ final class ExecutionServiceTests: XCTestCase {
         XCTAssertEqual(service.status, .success)
     }
 
+    func testRunUsesStructuredUserMessageWhenExecutionFails() async {
+        // Given
+        mockDocker.executionError = ZeroError.runtimeCommandFailed(
+            userMessage: "Docker shell command failed.",
+            debugDetails: "docker exec zero-dev sh -c 'echo hi' exited 127"
+        )
+
+        // When
+        await service.run(container: "test-container", command: "echo hi")
+
+        // Then
+        XCTAssertEqual(service.status, .failed("Docker shell command failed."))
+        XCTAssertTrue(service.output.contains("❌ Error: Docker shell command failed."))
+    }
+
     func testSaveAndLoadRunProfileCommand() throws {
         // Given
         let repositoryURL = URL(string: "https://github.com/zero-ide/Zero.git")!
@@ -303,6 +318,7 @@ class MockExecutionDockerService: DockerServiceProtocol {
     var streamingChunks: [String] = []
     var interChunkDelayNanoseconds: UInt64 = 0
     var dockerCommandAvailable = true
+    var executionError: Error?
     
     func checkInstallation() throws -> Bool { return true }
     
@@ -318,6 +334,10 @@ class MockExecutionDockerService: DockerServiceProtocol {
     func runContainer(image: String, name: String) throws -> String { return "" }
     func executeCommand(container: String, command: String) throws -> String { return "" }
     func executeShell(container: String, script: String) throws -> String {
+        if let executionError {
+            throw executionError
+        }
+
         if script.contains("command -v docker") {
             return dockerCommandAvailable ? "yes" : "no"
         }
@@ -342,6 +362,10 @@ class MockExecutionDockerService: DockerServiceProtocol {
     }
 
     func executeShellStreaming(container: String, script: String, onOutput: @escaping (String) -> Void) throws -> String {
+        if let executionError {
+            throw executionError
+        }
+
         if shouldBlockUntilCancelled {
             while !cancelCurrentExecutionCalled {
                 usleep(10_000)

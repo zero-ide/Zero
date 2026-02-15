@@ -6,16 +6,23 @@ class MockCommandRunner: CommandRunning {
     var executedCommand: String?
     var executedArguments: [String]?
     var mockOutput: String = ""
+    var mockError: Error?
     
     func execute(command: String, arguments: [String]) throws -> String {
         self.executedCommand = command
         self.executedArguments = arguments
+        if let mockError {
+            throw mockError
+        }
         return mockOutput
     }
 
     func executeStreaming(command: String, arguments: [String], onOutput: @escaping (String) -> Void) throws -> String {
         self.executedCommand = command
         self.executedArguments = arguments
+        if let mockError {
+            throw mockError
+        }
         onOutput(mockOutput)
         return mockOutput
     }
@@ -175,5 +182,29 @@ final class DockerServiceTests: XCTestCase {
         XCTAssertEqual(mockRunner.executedArguments?[2], "sh")
         XCTAssertEqual(mockRunner.executedArguments?[3], "-c")
         XCTAssertEqual(mockRunner.executedArguments?[4], "echo 'aGVsbG8=' | base64 -d > '/workspace/it'\\''s.txt'")
+    }
+
+    func testExecuteShellMapsRunnerFailureToStructuredZeroError() {
+        // Given
+        let mockRunner = MockCommandRunner()
+        mockRunner.mockError = NSError(
+            domain: "CommandRunner",
+            code: 127,
+            userInfo: [NSLocalizedDescriptionKey: "sh: npm: not found"]
+        )
+        let service = DockerService(runner: mockRunner)
+
+        // When & Then
+        XCTAssertThrowsError(try service.executeShell(container: "zero-dev", script: "npm start")) { error in
+            guard let zeroError = error as? ZeroError,
+                  case let .runtimeCommandFailed(userMessage, debugDetails) = zeroError else {
+                XCTFail("Expected ZeroError.runtimeCommandFailed")
+                return
+            }
+
+            XCTAssertEqual(userMessage, "Docker shell command failed.")
+            XCTAssertTrue(debugDetails.contains("npm start"))
+            XCTAssertTrue(debugDetails.contains("not found"))
+        }
     }
 }
