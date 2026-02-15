@@ -121,11 +121,14 @@ class AuthManager {
         var bytes = [UInt8](repeating: 0, count: byteCount)
         let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
 
-        if status == errSecSuccess {
-            return base64URLEncodedString(from: Data(bytes))
+        if status != errSecSuccess {
+            var generator = SystemRandomNumberGenerator()
+            for index in bytes.indices {
+                bytes[index] = UInt8.random(in: 0...255, using: &generator)
+            }
         }
 
-        return UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        return base64URLEncodedString(from: Data(bytes))
     }
 
     private func base64URLEncodedString(from data: Data) -> String {
