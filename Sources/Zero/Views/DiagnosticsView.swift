@@ -1,13 +1,21 @@
 import SwiftUI
 
 struct DiagnosticsView: View {
+    @EnvironmentObject private var appState: AppState
     @State private var snapshot: DiagnosticsSnapshot?
     @State private var isLoading = false
+    @State private var isExporting = false
+    @State private var exportMessage: String?
 
     private let service: DiagnosticsService
+    private let logExportService: LogExportService
 
-    init(service: DiagnosticsService = DiagnosticsService()) {
+    init(
+        service: DiagnosticsService = DiagnosticsService(),
+        logExportService: LogExportService = LogExportService()
+    ) {
         self.service = service
+        self.logExportService = logExportService
     }
 
     var body: some View {
@@ -27,6 +35,21 @@ struct DiagnosticsView: View {
                     }
                 }
                 .disabled(isLoading)
+
+                Button(action: exportLogs) {
+                    if isExporting {
+                        ProgressView()
+                    } else {
+                        Label("Export Logs", systemImage: "square.and.arrow.up")
+                    }
+                }
+                .disabled(isLoading || isExporting)
+            }
+
+            if let exportMessage {
+                Text(exportMessage)
+                    .font(.caption)
+                    .foregroundStyle(exportMessage.hasPrefix("Failed") ? Color.red : Color.secondary)
             }
 
             if let snapshot {
@@ -124,6 +147,37 @@ struct DiagnosticsView: View {
             }
         }
     }
+
+    private func exportLogs() {
+        guard !isExporting else { return }
+
+        isExporting = true
+        exportMessage = nil
+
+        let currentSnapshot = snapshot
+        let executionOutput = appState.executionService.output
+        let appLogs = AppLogStore.shared.recentEntries()
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let destination = try logExportService.export(
+                    snapshot: currentSnapshot,
+                    executionOutput: executionOutput,
+                    appLogs: appLogs
+                )
+
+                DispatchQueue.main.async {
+                    exportMessage = "Exported logs to \(destination.path)"
+                    isExporting = false
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    exportMessage = "Failed to export logs: \(error.localizedDescription)"
+                    isExporting = false
+                }
+            }
+        }
+    }
 }
 
 private struct DiagnosticsStatusRow: View {
@@ -150,6 +204,7 @@ private struct DiagnosticsStatusRow: View {
             dockerPath: "/opt/homebrew/bin/docker"
         )
     )
+    .environmentObject(AppState())
 }
 
 private final class PreviewDiagnosticsCommandRunner: CommandRunning {
