@@ -15,6 +15,9 @@ class ExecutionService: ObservableObject {
     @Published var status: ExecutionStatus = .idle
     @Published var output: String = ""
     private var cancellationRequested = false
+    private let installTimeoutSeconds: TimeInterval = 20
+    private let installMaxAttempts = 3
+    private let installRetryDelayNanoseconds: UInt64 = 300_000_000
     
     init(
         dockerService: DockerServiceProtocol,
@@ -85,18 +88,69 @@ class ExecutionService: ObservableObject {
     private func setupEnvironment(for command: String, container: String) async throws {
         if command.contains("npm") {
             await MainActor.run { self.output += "\n📦 Installing Node.js..." }
-            _ = try dockerService.executeShell(container: container, script: "apk add --no-cache nodejs npm")
+            try await installPackage(
+                container: container,
+                script: "apk add --no-cache nodejs npm",
+                runtimeName: "Node.js"
+            )
         } else if command.contains("python") {
             await MainActor.run { self.output += "\n📦 Installing Python..." }
-            _ = try dockerService.executeShell(container: container, script: "apk add --no-cache python3")
+            try await installPackage(
+                container: container,
+                script: "apk add --no-cache python3",
+                runtimeName: "Python"
+            )
         } else if command.contains("javac") || command.contains("mvn") || command.contains("gradle") {
             await MainActor.run { self.output += "\n📦 Setting up Java environment..." }
             // Note: JDK should be pre-installed in the container image
             // This is handled by using the configured JDK image
         } else if command.contains("go") {
             await MainActor.run { self.output += "\n📦 Installing Go..." }
-            _ = try dockerService.executeShell(container: container, script: "apk add --no-cache go")
+            try await installPackage(
+                container: container,
+                script: "apk add --no-cache go",
+                runtimeName: "Go"
+            )
         }
+    }
+
+    private func installPackage(container: String, script: String, runtimeName: String) async throws {
+        var lastError: Error?
+
+        for attempt in 1...installMaxAttempts {
+            do {
+                let timeoutScript = "timeout \(Int(installTimeoutSeconds)) sh -lc \"\(escapeForDoubleQuotedShell(script))\""
+                _ = try dockerService.executeShell(container: container, script: timeoutScript)
+                return
+            } catch {
+                lastError = error
+
+                if attempt == installMaxAttempts {
+                    let debugDetails = "runtime=\(runtimeName) attempts=\(installMaxAttempts) timeoutSeconds=\(installTimeoutSeconds) lastError=\(error.localizedDescription)"
+                    throw ZeroError.runtimeCommandFailed(
+                        userMessage: "Failed to install \(runtimeName) after \(installMaxAttempts) attempts.",
+                        debugDetails: debugDetails
+                    )
+                }
+
+                await MainActor.run {
+                    self.output += "\n⚠️ Retrying \(runtimeName) installation (attempt \(attempt + 1)/\(installMaxAttempts))..."
+                }
+                try? await Task.sleep(nanoseconds: installRetryDelayNanoseconds)
+            }
+        }
+
+        let fallbackMessage = "Failed to install \(runtimeName) after \(installMaxAttempts) attempts."
+        throw ZeroError.runtimeCommandFailed(
+            userMessage: fallbackMessage,
+            debugDetails: "runtime=\(runtimeName) lastError=\(lastError?.localizedDescription ?? "unknown")"
+        )
+    }
+
+    private func escapeForDoubleQuotedShell(_ script: String) -> String {
+        script
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
     }
     
     func createJavaContainer(name: String) async throws -> String {
