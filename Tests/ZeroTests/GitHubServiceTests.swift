@@ -30,6 +30,7 @@ final class GitHubServiceTests: XCTestCase {
         
         // Then
         XCTAssertEqual(request.url?.path, "/user/orgs")
+        XCTAssertTrue(request.url?.query?.contains("per_page=100") ?? false)
         XCTAssertEqual(request.httpMethod, "GET")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer ghp_test_token")
     }
