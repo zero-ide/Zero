@@ -9,9 +9,9 @@ enum GitHubServiceError: Error, Equatable {
 
     var requiresRelogin: Bool {
         switch self {
-        case .unauthorized, .forbidden:
+        case .unauthorized:
             return true
-        case .invalidResponse, .rateLimited, .badStatusCode:
+        case .invalidResponse, .forbidden, .rateLimited, .badStatusCode:
             return false
         }
     }
