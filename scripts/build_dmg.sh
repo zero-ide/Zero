@@ -80,6 +80,17 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<EOF
     <true/>
     <key>LSUIElement</key>
     <false/>
+    <key>CFBundleURLTypes</key>
+    <array>
+      <dict>
+        <key>CFBundleURLName</key>
+        <string>com.zero.ide.oauth</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+          <string>zero</string>
+        </array>
+      </dict>
+    </array>
 </dict>
 </plist>
 EOF
