@@ -465,6 +465,7 @@ class AppStateTests: XCTestCase {
 
         // Then
         XCTAssertNil(appState.selectedOrg)
+        XCTAssertNil(UserDefaults.standard.string(forKey: Constants.Preferences.selectedOrgLogin))
     }
 
     func testSelectedOrgChangePersistsContextAndPersonalClearsStoredContext() {
