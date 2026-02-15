@@ -167,6 +167,65 @@ enum ZeroError: Error, Equatable {
             return true
         }
     }
+
+    var telemetryCode: String {
+        switch self {
+        case .dockerNotInstalled:
+            return "docker_not_installed"
+        case .containerCreationFailed:
+            return "container_creation_failed"
+        case .containerExecutionFailed:
+            return "container_execution_failed"
+        case .containerNotFound:
+            return "container_not_found"
+        case .imageNotFound:
+            return "image_not_found"
+        case .gitNotInstalled:
+            return "git_not_installed"
+        case .gitCloneFailed:
+            return "git_clone_failed"
+        case .gitAuthenticationFailed:
+            return "git_authentication_failed"
+        case .invalidRepositoryURL:
+            return "invalid_repository_url"
+        case .githubAPIFailed:
+            return "github_api_failed"
+        case .githubAuthenticationFailed:
+            return "github_authentication_failed"
+        case .githubRateLimited:
+            return "github_rate_limited"
+        case .buildConfigurationFailed:
+            return "build_configuration_failed"
+        case .jdkNotFound:
+            return "jdk_not_found"
+        case .invalidJDKImage:
+            return "invalid_jdk_image"
+        case .sessionNotFound:
+            return "session_not_found"
+        case .sessionCreationFailed:
+            return "session_creation_failed"
+        case .sessionAlreadyExists:
+            return "session_already_exists"
+        case .fileNotFound:
+            return "file_not_found"
+        case .fileReadFailed:
+            return "file_read_failed"
+        case .fileWriteFailed:
+            return "file_write_failed"
+        case .keychainSaveFailed:
+            return "keychain_save_failed"
+        case .keychainLoadFailed:
+            return "keychain_load_failed"
+        case .keychainDeleteFailed:
+            return "keychain_delete_failed"
+        case .runtimeCommandFailed:
+            return "runtime_command_failed"
+        case .unknown:
+            return "unknown"
+        case .notImplemented:
+            return "not_implemented"
+        }
+    }
 }
 
 // MARK: - Result Extension
