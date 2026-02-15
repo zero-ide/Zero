@@ -282,6 +282,41 @@ final class ExecutionServiceTests: XCTestCase {
         XCTAssertTrue(installScript.contains("timeout 20 sh -lc"))
     }
 
+    func testRunRecordsTelemetrySummaryWhenEnabled() async {
+        // Given
+        service.telemetryEnabled = true
+        mockDocker.commandOutput = "ok"
+
+        // When
+        await service.run(container: "test-container", command: "echo ok")
+
+        mockDocker.executionError = ZeroError.runtimeCommandFailed(
+            userMessage: "Docker shell command failed.",
+            debugDetails: "runtime command failed"
+        )
+        await service.run(container: "test-container", command: "echo fail")
+
+        // Then
+        XCTAssertEqual(service.telemetrySummary.totalRuns, 2)
+        XCTAssertEqual(service.telemetrySummary.successfulRuns, 1)
+        XCTAssertEqual(service.telemetrySummary.failedRuns, 1)
+        XCTAssertEqual(service.telemetrySummary.topErrorCodes.first?.code, "runtime_command_failed")
+    }
+
+    func testRunDoesNotRecordTelemetryWhenDisabled() async {
+        // Given
+        service.telemetryEnabled = false
+        mockDocker.commandOutput = "ok"
+
+        // When
+        await service.run(container: "test-container", command: "echo ok")
+
+        // Then
+        XCTAssertEqual(service.telemetrySummary.totalRuns, 0)
+        XCTAssertEqual(service.telemetrySummary.successfulRuns, 0)
+        XCTAssertEqual(service.telemetrySummary.failedRuns, 0)
+    }
+
     func testSaveAndLoadRunProfileCommand() throws {
         // Given
         let repositoryURL = URL(string: "https://github.com/zero-ide/Zero.git")!
