@@ -96,4 +96,84 @@ final class DockerServiceTests: XCTestCase {
         XCTAssertEqual(mockRunner.executedArguments?[3], "-c")
         XCTAssertEqual(mockRunner.executedArguments?[4], script)
     }
+
+    func testEnsureDirectoryBuildsMkdirCommand() throws {
+        // Given
+        let mockRunner = MockCommandRunner()
+        let service = DockerService(runner: mockRunner)
+
+        // When
+        try service.ensureDirectory(container: "zero-dev", path: "/workspace/src")
+
+        // Then
+        XCTAssertEqual(mockRunner.executedArguments?[0], "exec")
+        XCTAssertEqual(mockRunner.executedArguments?[1], "zero-dev")
+        XCTAssertEqual(mockRunner.executedArguments?[2], "sh")
+        XCTAssertEqual(mockRunner.executedArguments?[3], "-c")
+        XCTAssertEqual(mockRunner.executedArguments?[4], "mkdir -p '/workspace/src'")
+    }
+
+    func testRenameBuildsMvCommand() throws {
+        // Given
+        let mockRunner = MockCommandRunner()
+        let service = DockerService(runner: mockRunner)
+
+        // When
+        try service.rename(container: "zero-dev", from: "/workspace/old.txt", to: "/workspace/new.txt")
+
+        // Then
+        XCTAssertEqual(mockRunner.executedArguments?[0], "exec")
+        XCTAssertEqual(mockRunner.executedArguments?[1], "zero-dev")
+        XCTAssertEqual(mockRunner.executedArguments?[2], "sh")
+        XCTAssertEqual(mockRunner.executedArguments?[3], "-c")
+        XCTAssertEqual(mockRunner.executedArguments?[4], "mv '/workspace/old.txt' '/workspace/new.txt'")
+    }
+
+    func testRemoveBuildsNonRecursiveRmCommand() throws {
+        // Given
+        let mockRunner = MockCommandRunner()
+        let service = DockerService(runner: mockRunner)
+
+        // When
+        try service.remove(container: "zero-dev", path: "/workspace/tmp.txt", recursive: false)
+
+        // Then
+        XCTAssertEqual(mockRunner.executedArguments?[0], "exec")
+        XCTAssertEqual(mockRunner.executedArguments?[1], "zero-dev")
+        XCTAssertEqual(mockRunner.executedArguments?[2], "sh")
+        XCTAssertEqual(mockRunner.executedArguments?[3], "-c")
+        XCTAssertEqual(mockRunner.executedArguments?[4], "rm -f '/workspace/tmp.txt'")
+    }
+
+    func testRemoveBuildsRecursiveRmCommand() throws {
+        // Given
+        let mockRunner = MockCommandRunner()
+        let service = DockerService(runner: mockRunner)
+
+        // When
+        try service.remove(container: "zero-dev", path: "/workspace/tmp", recursive: true)
+
+        // Then
+        XCTAssertEqual(mockRunner.executedArguments?[0], "exec")
+        XCTAssertEqual(mockRunner.executedArguments?[1], "zero-dev")
+        XCTAssertEqual(mockRunner.executedArguments?[2], "sh")
+        XCTAssertEqual(mockRunner.executedArguments?[3], "-c")
+        XCTAssertEqual(mockRunner.executedArguments?[4], "rm -rf '/workspace/tmp'")
+    }
+
+    func testWriteFileEscapesSingleQuotesInPath() throws {
+        // Given
+        let mockRunner = MockCommandRunner()
+        let service = DockerService(runner: mockRunner)
+
+        // When
+        try service.writeFile(container: "zero-dev", path: "/workspace/it's.txt", content: "hello")
+
+        // Then
+        XCTAssertEqual(mockRunner.executedArguments?[0], "exec")
+        XCTAssertEqual(mockRunner.executedArguments?[1], "zero-dev")
+        XCTAssertEqual(mockRunner.executedArguments?[2], "sh")
+        XCTAssertEqual(mockRunner.executedArguments?[3], "-c")
+        XCTAssertEqual(mockRunner.executedArguments?[4], "echo 'aGVsbG8=' | base64 -d > '/workspace/it'\\''s.txt'")
+    }
 }
