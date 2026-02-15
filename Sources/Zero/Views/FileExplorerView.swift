@@ -245,12 +245,14 @@ struct FileExplorerView: View {
         defer { isPerformingOperation = false }
 
         do {
+            let sanitizedName = newItemName.trimmingCharacters(in: .whitespacesAndNewlines)
             let directoryPath = targetDirectoryPath()
-            let path = ((directoryPath as NSString).appendingPathComponent(newItemName) as NSString).standardizingPath
+            let path = ((directoryPath as NSString).appendingPathComponent(sanitizedName) as NSString).standardizingPath
             try await fileService.createFile(path: path)
             selectedFile = FileItem(name: (path as NSString).lastPathComponent, path: path, isDirectory: false)
             sheetOperationErrorMessage = nil
             showCreateFileSheet = false
+            actionTarget = nil
             await loadFiles()
         } catch {
             sheetOperationErrorMessage = "Failed to create file: \(error.localizedDescription)"
@@ -263,12 +265,14 @@ struct FileExplorerView: View {
         defer { isPerformingOperation = false }
 
         do {
+            let sanitizedName = newItemName.trimmingCharacters(in: .whitespacesAndNewlines)
             let directoryPath = targetDirectoryPath()
-            let path = ((directoryPath as NSString).appendingPathComponent(newItemName) as NSString).standardizingPath
+            let path = ((directoryPath as NSString).appendingPathComponent(sanitizedName) as NSString).standardizingPath
             try await fileService.createDirectory(path: path)
             selectedFile = FileItem(name: (path as NSString).lastPathComponent, path: path, isDirectory: true)
             sheetOperationErrorMessage = nil
             showCreateFolderSheet = false
+            actionTarget = nil
             await loadFiles()
         } catch {
             sheetOperationErrorMessage = "Failed to create folder: \(error.localizedDescription)"
@@ -283,13 +287,15 @@ struct FileExplorerView: View {
 
         do {
             let parentDirectory = (actionTarget.path as NSString).deletingLastPathComponent
-            let destinationPath = ((parentDirectory as NSString).appendingPathComponent(newItemName) as NSString).standardizingPath
+            let sanitizedName = newItemName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let destinationPath = ((parentDirectory as NSString).appendingPathComponent(sanitizedName) as NSString).standardizingPath
             try await fileService.renameItem(at: actionTarget.path, to: destinationPath)
             if selectedFile?.path == actionTarget.path {
                 selectedFile = FileItem(name: (destinationPath as NSString).lastPathComponent, path: destinationPath, isDirectory: actionTarget.isDirectory)
             }
             sheetOperationErrorMessage = nil
             showRenameSheet = false
+            self.actionTarget = nil
             await loadFiles()
         } catch {
             sheetOperationErrorMessage = "Failed to rename item: \(error.localizedDescription)"
