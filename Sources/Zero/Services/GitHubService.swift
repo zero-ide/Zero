@@ -41,7 +41,7 @@ class GitHubService {
     }
     
     func createFetchOrgsRequest() -> URLRequest {
-        let url = URL(string: "\(baseURL)/user/orgs")!
+        let url = URL(string: "\(baseURL)/user/orgs?per_page=100")!
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

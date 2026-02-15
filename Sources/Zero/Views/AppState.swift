@@ -17,7 +17,11 @@ class AppState: ObservableObject {
     @Published var userFacingError: String? = nil
     
     @Published var organizations: [Organization] = []
-    @Published var selectedOrg: Organization? = nil
+    @Published var selectedOrg: Organization? = nil {
+        didSet {
+            persistSelectedOrgContextIfNeeded()
+        }
+    }
     
     // 페이지 크기 (테스트 시 조정 가능)
     var pageSize: Int = Constants.GitHub.pageSize
@@ -65,6 +69,7 @@ class AppState: ObservableObject {
     private var pendingOAuthState: String?
     private var pendingOAuthCodeVerifier: String?
     private var pendingOAuthRedirectURI: String?
+    private var shouldPersistSelectedOrgContext = true
 
     var pendingOAuthStateForTesting: String? {
         pendingOAuthState
@@ -197,6 +202,7 @@ class AppState: ObservableObject {
         do {
             let service = gitHubServiceFactory(token)
             self.organizations = try await service.fetchOrganizations()
+            reconcileSelectedOrgContext()
         } catch {
             print("Failed to fetch orgs: \(error)")
             handleGitHubFetchError(error, defaultMessage: "Failed to load organizations. Please try again.")
@@ -393,6 +399,47 @@ class AppState: ObservableObject {
         pendingOAuthRedirectURI = nil
     }
 
+    private func persistSelectedOrgContextIfNeeded() {
+        guard shouldPersistSelectedOrgContext else { return }
+
+        if let login = selectedOrg?.login {
+            UserDefaults.standard.set(login, forKey: Constants.Preferences.selectedOrgLogin)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Constants.Preferences.selectedOrgLogin)
+        }
+    }
+
+    private func setSelectedOrgWithoutPersisting(_ org: Organization?) {
+        shouldPersistSelectedOrgContext = false
+        selectedOrg = org
+        shouldPersistSelectedOrgContext = true
+    }
+
+    private func reconcileSelectedOrgContext() {
+        if let currentOrg = selectedOrg,
+           let matchingCurrentOrg = organizations.first(where: { $0.login == currentOrg.login }) {
+            if currentOrg != matchingCurrentOrg {
+                setSelectedOrgWithoutPersisting(matchingCurrentOrg)
+            }
+            return
+        }
+
+        if selectedOrg != nil {
+            setSelectedOrgWithoutPersisting(nil)
+        }
+
+        guard let storedOrgLogin = UserDefaults.standard.string(forKey: Constants.Preferences.selectedOrgLogin) else {
+            return
+        }
+
+        guard let matchingOrg = organizations.first(where: { $0.login == storedOrgLogin }) else {
+            UserDefaults.standard.removeObject(forKey: Constants.Preferences.selectedOrgLogin)
+            return
+        }
+
+        setSelectedOrgWithoutPersisting(matchingOrg)
+    }
+
     private func handleGitHubFetchError(_ error: Error, defaultMessage: String) {
         if let gitHubError = error as? GitHubServiceError, gitHubError.requiresRelogin {
             clearAuthenticationStateAfterFailure()
@@ -409,7 +456,7 @@ class AppState: ObservableObject {
         isLoggedIn = false
         repositories = []
         organizations = []
-        selectedOrg = nil
+        setSelectedOrgWithoutPersisting(nil)
         hasMoreRepos = false
         isLoadingMore = false
     }

@@ -21,4 +21,8 @@ enum Constants {
         static let sidebarIdealWidth: CGFloat = 260
         static let sidebarMaxWidth: CGFloat = 400
     }
+
+    enum Preferences {
+        static let selectedOrgLogin = "com.zero.ide.last_selected_org_login"
+    }
 }
