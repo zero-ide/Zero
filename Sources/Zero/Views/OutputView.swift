@@ -7,7 +7,7 @@ struct OutputView: View {
     @State private var showErrorsOnly = false
 
     private var allOutputLines: [OutputLogLine] {
-        OutputLogHighlighter.lines(from: executionService.output)
+        OutputLogHighlighterHelper.lines(from: executionService.output)
     }
 
     private var displayedLines: [OutputLogLine] {
@@ -15,7 +15,7 @@ struct OutputView: View {
             return [OutputLogLine(text: "Ready to run.", isError: false)]
         }
 
-        let filtered = OutputLogHighlighter.filteredLines(from: executionService.output, errorsOnly: showErrorsOnly)
+        let filtered = showErrorsOnly ? allOutputLines.filter(\.isError) : allOutputLines
         if filtered.isEmpty && showErrorsOnly {
             return [OutputLogLine(text: "No error lines detected.", isError: false)]
         }

@@ -5,7 +5,7 @@ struct OutputLogLine: Equatable {
     let isError: Bool
 }
 
-enum OutputLogHighlighter {
+enum OutputLogHighlighterHelper {
     private static let errorPatterns = [
         "error",
         "failed",
