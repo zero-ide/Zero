@@ -14,22 +14,33 @@ class ExecutionService: ObservableObject {
     let runProfileService: RunProfileService
     @Published var status: ExecutionStatus = .idle
     @Published var output: String = ""
+    @Published private(set) var telemetrySummary: ExecutionTelemetrySummary = .empty
+
+    var telemetryEnabled = false
+
     private var cancellationRequested = false
     private let installTimeoutSeconds: TimeInterval = 20
     private let installMaxAttempts = 3
     private let installRetryDelayNanoseconds: UInt64 = 300_000_000
+    private let nowProvider: () -> Date
+    private var telemetryTotalDurationSeconds: TimeInterval = 0
+    private var telemetryErrorCounts: [String: Int] = [:]
     
     init(
         dockerService: DockerServiceProtocol,
         buildConfigService: BuildConfigurationService = FileBasedBuildConfigurationService(),
-        runProfileService: RunProfileService = FileBasedRunProfileService()
+        runProfileService: RunProfileService = FileBasedRunProfileService(),
+        nowProvider: @escaping () -> Date = Date.init
     ) {
         self.dockerService = dockerService
         self.buildConfigService = buildConfigService
         self.runProfileService = runProfileService
+        self.nowProvider = nowProvider
     }
     
     func run(container: String, command: String) async {
+        let startedAt = nowProvider()
+
         await MainActor.run {
             self.status = .running
             self.cancellationRequested = false
@@ -52,8 +63,10 @@ class ExecutionService: ObservableObject {
                 if self.cancellationRequested {
                     self.status = .failed("Execution cancelled")
                     self.output += "\n⏹️ Execution cancelled by user"
+                    self.recordTelemetryIfEnabled(success: false, errorCode: "execution_cancelled", startedAt: startedAt, endedAt: self.nowProvider())
                 } else {
                     self.status = .success
+                    self.recordTelemetryIfEnabled(success: true, errorCode: nil, startedAt: startedAt, endedAt: self.nowProvider())
                 }
             }
         } catch {
@@ -61,10 +74,17 @@ class ExecutionService: ObservableObject {
                 if self.cancellationRequested {
                     self.status = .failed("Execution cancelled")
                     self.output += "\n⏹️ Execution cancelled by user"
+                    self.recordTelemetryIfEnabled(success: false, errorCode: "execution_cancelled", startedAt: startedAt, endedAt: self.nowProvider())
                 } else {
                     let userMessage = self.userMessage(for: error)
                     self.status = .failed(userMessage)
                     self.output += "\n❌ Error: \(userMessage)"
+                    self.recordTelemetryIfEnabled(
+                        success: false,
+                        errorCode: self.telemetryErrorCode(for: error),
+                        startedAt: startedAt,
+                        endedAt: self.nowProvider()
+                    )
                 }
             }
         }
@@ -151,6 +171,58 @@ class ExecutionService: ObservableObject {
         script
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
+    }
+
+    private func recordTelemetryIfEnabled(success: Bool, errorCode: String?, startedAt: Date, endedAt: Date) {
+        guard telemetryEnabled else { return }
+
+        let elapsed = max(0, endedAt.timeIntervalSince(startedAt))
+        telemetryTotalDurationSeconds += elapsed
+
+        let totalRuns = telemetrySummary.totalRuns + 1
+        let successfulRuns = telemetrySummary.successfulRuns + (success ? 1 : 0)
+        let failedRuns = telemetrySummary.failedRuns + (success ? 0 : 1)
+
+        if let errorCode {
+            telemetryErrorCounts[errorCode, default: 0] += 1
+        }
+
+        let topErrorCodes = telemetryErrorCounts
+            .map { TelemetryErrorMetric(code: $0.key, count: $0.value) }
+            .sorted { lhs, rhs in
+                if lhs.count == rhs.count {
+                    return lhs.code < rhs.code
+                }
+                return lhs.count > rhs.count
+            }
+            .prefix(3)
+
+        let averageDurationSeconds = telemetryTotalDurationSeconds / Double(totalRuns)
+
+        telemetrySummary = ExecutionTelemetrySummary(
+            totalRuns: totalRuns,
+            successfulRuns: successfulRuns,
+            failedRuns: failedRuns,
+            averageDurationSeconds: averageDurationSeconds,
+            topErrorCodes: Array(topErrorCodes)
+        )
+    }
+
+    private func telemetryErrorCode(for error: Error) -> String {
+        if let zeroError = error as? ZeroError {
+            return zeroError.telemetryCode
+        }
+
+        if let urlError = error as? URLError {
+            return "url_error_\(urlError.errorCode)"
+        }
+
+        if case let CommandRunnerError.commandFailed(_, _, exitCode, _) = error {
+            return "command_failed_\(exitCode)"
+        }
+
+        let nsError = error as NSError
+        return "\(nsError.domain)#\(nsError.code)"
     }
     
     func createJavaContainer(name: String) async throws -> String {
