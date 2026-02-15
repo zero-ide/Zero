@@ -372,7 +372,7 @@ class AppStateTests: XCTestCase {
         appState.organizations = [Organization(id: 1, login: "zero-ide", avatarURL: nil, description: nil)]
         appState.selectedOrg = appState.organizations.first
         appState.gitHubServiceFactory = { _ in
-            MockGitHubService(fetchOrgsError: GitHubServiceError.forbidden)
+            MockGitHubService(fetchOrgsError: GitHubServiceError.unauthorized)
         }
 
         // When
@@ -384,6 +384,23 @@ class AppStateTests: XCTestCase {
         XCTAssertTrue(appState.organizations.isEmpty)
         XCTAssertNil(appState.selectedOrg)
         XCTAssertEqual(appState.userFacingError, "Authentication expired. Please sign in again.")
+    }
+
+    func testFetchOrganizationsForbiddenErrorKeepsLoginState() async {
+        // Given
+        appState.isLoggedIn = true
+        appState.accessToken = "gho_test_token"
+        appState.gitHubServiceFactory = { _ in
+            MockGitHubService(fetchOrgsError: GitHubServiceError.forbidden)
+        }
+
+        // When
+        await appState.fetchOrganizations()
+
+        // Then
+        XCTAssertTrue(appState.isLoggedIn)
+        XCTAssertEqual(appState.accessToken, "gho_test_token")
+        XCTAssertEqual(appState.userFacingError, "Failed to load organizations. Please try again.")
     }
 
     func testLoadMoreRepositoriesAuthErrorForcesLogoutAndStopsPagination() async {
