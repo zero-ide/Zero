@@ -130,6 +130,63 @@ class AppStateTests: XCTestCase {
         XCTAssertNil(appState.pendingOAuthStateForTesting)
         XCTAssertNil(appState.pendingOAuthCodeVerifierForTesting)
     }
+
+    func testHandleOAuthCallbackIgnoresNonMatchingRedirectAndKeepsPendingContext() async {
+        // Given
+        appState.oauthClientIDProvider = { "client-id" }
+        appState.oauthClientSecretProvider = { "client-secret" }
+        appState.oauthRedirectURIProvider = { "zero://auth/callback" }
+
+        guard let loginURL = try? appState.beginOAuthLogin(),
+              let loginComponents = URLComponents(url: loginURL, resolvingAgainstBaseURL: false),
+              let expectedState = loginComponents.queryItems?.first(where: { $0.name == "state" })?.value else {
+            XCTFail("Failed to prepare OAuth login context")
+            return
+        }
+
+        let unrelatedURL = URL(string: "zero://other/path?code=code-1&state=\(expectedState)")!
+
+        // When
+        await appState.handleOAuthCallback(unrelatedURL)
+
+        // Then
+        XCTAssertNil(appState.userFacingError)
+        XCTAssertNotNil(appState.pendingOAuthStateForTesting)
+        XCTAssertNotNil(appState.pendingOAuthCodeVerifierForTesting)
+        XCTAssertFalse(appState.isLoggedIn)
+    }
+
+    func testHandleOAuthCallbackUsesPendingRedirectURIForTokenExchangeRequest() async {
+        // Given
+        appState.oauthClientIDProvider = { "client-id" }
+        appState.oauthClientSecretProvider = { "client-secret" }
+        appState.oauthRedirectURIProvider = { "zero://auth/callback" }
+
+        guard let loginURL = try? appState.beginOAuthLogin(),
+              let loginComponents = URLComponents(url: loginURL, resolvingAgainstBaseURL: false),
+              let expectedState = loginComponents.queryItems?.first(where: { $0.name == "state" })?.value else {
+            XCTFail("Failed to prepare OAuth login context")
+            return
+        }
+
+        appState.oauthRedirectURIProvider = { "zero://changed/callback" }
+
+        var capturedRedirectURI: String?
+        appState.oauthTokenExchanger = { request in
+            let bodyData = try XCTUnwrap(request.httpBody)
+            let bodyJSON = try JSONSerialization.jsonObject(with: bodyData) as? [String: String]
+            capturedRedirectURI = bodyJSON?["redirect_uri"]
+            return "gho_test_token"
+        }
+
+        let callback = URL(string: "zero://auth/callback?code=code-1&state=\(expectedState)")!
+
+        // When
+        await appState.handleOAuthCallback(callback)
+
+        // Then
+        XCTAssertEqual(capturedRedirectURI, "zero://auth/callback")
+    }
     
     // MARK: - Editor State Tests
     

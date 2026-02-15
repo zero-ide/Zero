@@ -64,6 +64,7 @@ class AppState: ObservableObject {
 
     private var pendingOAuthState: String?
     private var pendingOAuthCodeVerifier: String?
+    private var pendingOAuthRedirectURI: String?
 
     var pendingOAuthStateForTesting: String? {
         pendingOAuthState
@@ -128,6 +129,7 @@ class AppState: ObservableObject {
 
         pendingOAuthState = context.state
         pendingOAuthCodeVerifier = context.codeVerifier
+        pendingOAuthRedirectURI = redirectURI
         userFacingError = nil
 
         return authManager.getLoginURL(
@@ -138,6 +140,15 @@ class AppState: ObservableObject {
     }
 
     func handleOAuthCallback(_ url: URL) async {
+        let expectedRedirectURI = pendingOAuthRedirectURI ?? oauthRedirectURIProvider()
+        if let expectedRedirectURL = URL(string: expectedRedirectURI) {
+            let incomingKey = (url.scheme, url.host, url.path)
+            let expectedKey = (expectedRedirectURL.scheme, expectedRedirectURL.host, expectedRedirectURL.path)
+            if incomingKey != expectedKey {
+                return
+            }
+        }
+
         guard let clientID = oauthClientIDProvider(),
               !clientID.isEmpty,
               let clientSecret = oauthClientSecretProvider(),
@@ -167,7 +178,7 @@ class AppState: ObservableObject {
                 code: response.code,
                 clientSecret: clientSecret,
                 codeVerifier: codeVerifier,
-                redirectURI: oauthRedirectURIProvider()
+                redirectURI: expectedRedirectURI
             )
 
             let token = try await oauthTokenExchanger(request)
@@ -379,6 +390,7 @@ class AppState: ObservableObject {
     private func clearPendingOAuthContext() {
         pendingOAuthState = nil
         pendingOAuthCodeVerifier = nil
+        pendingOAuthRedirectURI = nil
     }
 }
 
