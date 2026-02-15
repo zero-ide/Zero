@@ -199,7 +199,7 @@ class AppState: ObservableObject {
             self.organizations = try await service.fetchOrganizations()
         } catch {
             print("Failed to fetch orgs: \(error)")
-            userFacingError = "Failed to load organizations. Please try again."
+            handleGitHubFetchError(error, defaultMessage: "Failed to load organizations. Please try again.")
         }
     }
     
@@ -230,7 +230,7 @@ class AppState: ObservableObject {
             }
         } catch {
             print("Failed to fetch repos: \(error)")
-            userFacingError = "Failed to load repositories. Please check your token and network."
+            handleGitHubFetchError(error, defaultMessage: "Failed to load repositories. Please check your token and network.")
         }
     }
     
@@ -264,7 +264,7 @@ class AppState: ObservableObject {
             }
         } catch {
             print("Failed to load more repos: \(error)")
-            userFacingError = "Failed to load more repositories."
+            handleGitHubFetchError(error, defaultMessage: "Failed to load more repositories.")
         }
     }
     
@@ -391,6 +391,27 @@ class AppState: ObservableObject {
         pendingOAuthState = nil
         pendingOAuthCodeVerifier = nil
         pendingOAuthRedirectURI = nil
+    }
+
+    private func handleGitHubFetchError(_ error: Error, defaultMessage: String) {
+        if let gitHubError = error as? GitHubServiceError, gitHubError.requiresRelogin {
+            clearAuthenticationStateAfterFailure()
+            userFacingError = "Authentication expired. Please sign in again."
+            return
+        }
+
+        userFacingError = defaultMessage
+    }
+
+    private func clearAuthenticationStateAfterFailure() {
+        try? KeychainHelper.standard.delete(service: keychainService, account: keychainAccount)
+        accessToken = nil
+        isLoggedIn = false
+        repositories = []
+        organizations = []
+        selectedOrg = nil
+        hasMoreRepos = false
+        isLoadingMore = false
     }
 }
 
