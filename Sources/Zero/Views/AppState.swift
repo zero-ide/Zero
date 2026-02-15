@@ -479,11 +479,15 @@ class AppState: ObservableObject {
     private func logError(_ prefix: String, error: Error) {
         if let zeroError = error as? ZeroError,
            case let .runtimeCommandFailed(_, debugDetails) = zeroError {
-            print("\(prefix): \(debugDetails)")
+            let message = "\(prefix): \(debugDetails)"
+            AppLogStore.shared.append(message)
+            print(message)
             return
         }
 
-        print("\(prefix): \(error)")
+        let message = "\(prefix): \(error)"
+        AppLogStore.shared.append(message)
+        print(message)
     }
 }
 
