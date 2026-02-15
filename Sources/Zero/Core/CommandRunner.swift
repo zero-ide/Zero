@@ -1,5 +1,20 @@
 import Foundation
 
+enum CommandRunnerError: LocalizedError {
+    case commandFailed(command: String, arguments: [String], exitCode: Int, output: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .commandFailed(_, _, let exitCode, let output):
+            let trimmedOutput = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedOutput.isEmpty {
+                return "Command failed with exit code \(exitCode)."
+            }
+            return trimmedOutput
+        }
+    }
+}
+
 protocol CommandRunning {
     func execute(command: String, arguments: [String]) throws -> String
     func executeStreaming(command: String, arguments: [String], onOutput: @escaping (String) -> Void) throws -> String
@@ -69,8 +84,12 @@ final class CommandRunner: CommandRunning {
         let output = String(data: outputData, encoding: .utf8) ?? ""
         
         if process.terminationStatus != 0 {
-            // 에러 발생 시 throw
-            throw NSError(domain: "CommandRunner", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: output])
+            throw CommandRunnerError.commandFailed(
+                command: command,
+                arguments: arguments,
+                exitCode: Int(process.terminationStatus),
+                output: output
+            )
         }
         
         return output
