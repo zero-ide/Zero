@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct FileItem: Identifiable {
-    let id = UUID()
+    var id: String { path }
     let name: String
     let path: String
     let isDirectory: Bool
@@ -25,6 +25,8 @@ struct FileExplorerView: View {
     @State private var showDeleteConfirmation = false
     @State private var actionTarget: FileItem?
     @State private var newItemName = ""
+    @State private var sheetOperationErrorMessage: String?
+    @State private var isPerformingOperation = false
 
     let containerName: String
     let projectName: String
@@ -162,9 +164,15 @@ struct FileExplorerView: View {
             Button("Delete", role: .destructive) {
                 Task { await deleteItem() }
             }
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) {
+                actionTarget = nil
+            }
         } message: {
-            Text("Are you sure you want to delete \(actionTarget?.name ?? "this item")?")
+            if actionTarget?.isDirectory == true {
+                Text("Are you sure you want to delete \(actionTarget?.name ?? "this folder") and all contents?")
+            } else {
+                Text("Are you sure you want to delete \(actionTarget?.name ?? "this item")?")
+            }
         }
         .task {
             await loadFiles()
@@ -204,6 +212,7 @@ struct FileExplorerView: View {
         actionTarget = parent
         newItemName = ""
         operationErrorMessage = nil
+        sheetOperationErrorMessage = nil
         showCreateFileSheet = true
     }
 
@@ -211,6 +220,7 @@ struct FileExplorerView: View {
         actionTarget = parent
         newItemName = ""
         operationErrorMessage = nil
+        sheetOperationErrorMessage = nil
         showCreateFolderSheet = true
     }
 
@@ -218,49 +228,71 @@ struct FileExplorerView: View {
         actionTarget = item
         newItemName = item.name
         operationErrorMessage = nil
+        sheetOperationErrorMessage = nil
         showRenameSheet = true
     }
 
     private func prepareDelete(_ item: FileItem) {
         actionTarget = item
         operationErrorMessage = nil
+        sheetOperationErrorMessage = nil
         showDeleteConfirmation = true
     }
 
     private func createFile() async {
+        guard !isPerformingOperation else { return }
+        isPerformingOperation = true
+        defer { isPerformingOperation = false }
+
         do {
             let directoryPath = targetDirectoryPath()
             let path = ((directoryPath as NSString).appendingPathComponent(newItemName) as NSString).standardizingPath
             try await fileService.createFile(path: path)
+            selectedFile = FileItem(name: (path as NSString).lastPathComponent, path: path, isDirectory: false)
+            sheetOperationErrorMessage = nil
             showCreateFileSheet = false
             await loadFiles()
         } catch {
-            operationErrorMessage = "Failed to create file: \(error.localizedDescription)"
+            sheetOperationErrorMessage = "Failed to create file: \(error.localizedDescription)"
         }
     }
 
     private func createFolder() async {
+        guard !isPerformingOperation else { return }
+        isPerformingOperation = true
+        defer { isPerformingOperation = false }
+
         do {
             let directoryPath = targetDirectoryPath()
             let path = ((directoryPath as NSString).appendingPathComponent(newItemName) as NSString).standardizingPath
             try await fileService.createDirectory(path: path)
+            selectedFile = FileItem(name: (path as NSString).lastPathComponent, path: path, isDirectory: true)
+            sheetOperationErrorMessage = nil
             showCreateFolderSheet = false
             await loadFiles()
         } catch {
-            operationErrorMessage = "Failed to create folder: \(error.localizedDescription)"
+            sheetOperationErrorMessage = "Failed to create folder: \(error.localizedDescription)"
         }
     }
 
     private func renameItem() async {
         guard let actionTarget else { return }
+        guard !isPerformingOperation else { return }
+        isPerformingOperation = true
+        defer { isPerformingOperation = false }
+
         do {
             let parentDirectory = (actionTarget.path as NSString).deletingLastPathComponent
             let destinationPath = ((parentDirectory as NSString).appendingPathComponent(newItemName) as NSString).standardizingPath
             try await fileService.renameItem(at: actionTarget.path, to: destinationPath)
+            if selectedFile?.path == actionTarget.path {
+                selectedFile = FileItem(name: (destinationPath as NSString).lastPathComponent, path: destinationPath, isDirectory: actionTarget.isDirectory)
+            }
+            sheetOperationErrorMessage = nil
             showRenameSheet = false
             await loadFiles()
         } catch {
-            operationErrorMessage = "Failed to rename item: \(error.localizedDescription)"
+            sheetOperationErrorMessage = "Failed to rename item: \(error.localizedDescription)"
         }
     }
 
@@ -271,6 +303,7 @@ struct FileExplorerView: View {
             if selectedFile?.path == actionTarget.path {
                 selectedFile = nil
             }
+            self.actionTarget = nil
             await loadFiles()
         } catch {
             operationErrorMessage = "Failed to delete item: \(error.localizedDescription)"
@@ -310,11 +343,21 @@ struct FileExplorerView: View {
 
                 TextField(prompt, text: $newItemName)
                     .textFieldStyle(.roundedBorder)
+                    .disabled(isPerformingOperation)
+
+                if let sheetOperationErrorMessage {
+                    Text(sheetOperationErrorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
 
                 Spacer()
 
                 HStack {
                     Button("Cancel") {
+                        actionTarget = nil
+                        sheetOperationErrorMessage = nil
+                        isPerformingOperation = false
                         showCreateFileSheet = false
                         showCreateFolderSheet = false
                         showRenameSheet = false
@@ -326,7 +369,7 @@ struct FileExplorerView: View {
                         Task { await onSubmit() }
                     }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(newItemName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(newItemName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPerformingOperation)
                 }
             }
             .padding(20)
