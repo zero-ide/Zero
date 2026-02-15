@@ -5,6 +5,11 @@ class FileService {
     private let docker: DockerServiceProtocol
     private let containerName: String
     private let workspacePath: String
+
+    private enum PathOperation {
+        case read
+        case write
+    }
     
     init(
         containerName: String,
@@ -18,7 +23,7 @@ class FileService {
     
     /// 디렉토리 내용 조회 및 FileItem 변환
     func listDirectory(path: String? = nil) async throws -> [FileItem] {
-        let targetPath = path ?? workspacePath
+        let targetPath = try resolveWorkspacePath(path ?? workspacePath, for: .read)
         
         // ls -la 실행
         let output = try docker.listFiles(container: containerName, path: targetPath)
@@ -68,41 +73,41 @@ class FileService {
     
     /// 파일 내용 읽기
     func readFile(path: String) async throws -> String {
-        let safePath = try resolveWorkspacePath(path)
+        let safePath = try resolveWorkspacePath(path, for: .read)
         return try docker.readFile(container: containerName, path: safePath)
     }
     
     /// 파일 저장
     func writeFile(path: String, content: String) async throws {
-        let safePath = try resolveWorkspacePath(path)
+        let safePath = try resolveWorkspacePath(path, for: .write)
         try docker.writeFile(container: containerName, path: safePath, content: content)
     }
 
     func createDirectory(path: String) async throws {
-        let safePath = try resolveWorkspacePath(path)
+        let safePath = try resolveWorkspacePath(path, for: .write)
         try docker.ensureDirectory(container: containerName, path: safePath)
     }
 
     func createFile(path: String, initialContent: String = "") async throws {
-        let safePath = try resolveWorkspacePath(path)
+        let safePath = try resolveWorkspacePath(path, for: .write)
         try docker.writeFile(container: containerName, path: safePath, content: initialContent)
     }
 
     func renameItem(at path: String, to newPath: String) async throws {
-        let safeSourcePath = try resolveWorkspacePath(path)
-        let safeTargetPath = try resolveWorkspacePath(newPath)
+        let safeSourcePath = try resolveWorkspacePath(path, for: .write)
+        let safeTargetPath = try resolveWorkspacePath(newPath, for: .write)
         try docker.rename(container: containerName, from: safeSourcePath, to: safeTargetPath)
     }
 
     func deleteItem(at path: String, recursive: Bool = false) async throws {
-        let safePath = try resolveWorkspacePath(path)
+        let safePath = try resolveWorkspacePath(path, for: .write)
         try docker.remove(container: containerName, path: safePath, recursive: recursive)
     }
 
-    private func resolveWorkspacePath(_ path: String) throws -> String {
+    private func resolveWorkspacePath(_ path: String, for operation: PathOperation) throws -> String {
         let trimmedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedPath.isEmpty else {
-            throw ZeroError.fileWriteFailed(path: path)
+            throw errorForPath(path, operation: operation)
         }
 
         let candidatePath: String
@@ -115,9 +120,18 @@ class FileService {
         let workspaceRoot = workspacePath
         let isInWorkspace = candidatePath == workspaceRoot || candidatePath.hasPrefix(workspaceRoot + "/")
         guard isInWorkspace else {
-            throw ZeroError.fileWriteFailed(path: path)
+            throw errorForPath(path, operation: operation)
         }
 
         return candidatePath
+    }
+
+    private func errorForPath(_ path: String, operation: PathOperation) -> ZeroError {
+        switch operation {
+        case .read:
+            return .fileReadFailed(path: path)
+        case .write:
+            return .fileWriteFailed(path: path)
+        }
     }
 }

@@ -16,6 +16,38 @@ final class FileServiceTests: XCTestCase {
         XCTAssertEqual(docker.writtenFiles.first?.content, "print(\"hi\")")
     }
 
+    func testListDirectoryRejectsPathOutsideWorkspace() async {
+        // Given
+        let docker = MockFileOpsDockerService()
+        let service = FileService(containerName: "zero-dev", workspacePath: "/workspace", docker: docker)
+
+        // When
+        do {
+            _ = try await service.listDirectory(path: "../outside")
+            XCTFail("Expected listDirectory to reject traversal path")
+        } catch {
+            // Then
+            XCTAssertTrue(docker.listCalls.isEmpty)
+        }
+    }
+
+    func testReadFileOutsideWorkspaceThrowsReadErrorType() async {
+        // Given
+        let docker = MockFileOpsDockerService()
+        let service = FileService(containerName: "zero-dev", workspacePath: "/workspace", docker: docker)
+
+        // When
+        do {
+            _ = try await service.readFile(path: "../secret")
+            XCTFail("Expected readFile to reject traversal path")
+        } catch let error as ZeroError {
+            // Then
+            XCTAssertEqual(error, .fileReadFailed(path: "../secret"))
+        } catch {
+            XCTFail("Unexpected error type: \(error)")
+        }
+    }
+
     func testCreateDirectoryRejectsPathOutsideWorkspace() async {
         // Given
         let docker = MockFileOpsDockerService()
@@ -158,6 +190,7 @@ final class FileServiceTests: XCTestCase {
 
 private final class MockFileOpsDockerService: DockerServiceProtocol {
     var executedScripts: [String] = []
+    var listCalls: [String] = []
     var renameCalls: [(from: String, to: String)] = []
     var removeCalls: [(path: String, recursive: Bool)] = []
     var ensuredDirectories: [String] = []
@@ -177,7 +210,10 @@ private final class MockFileOpsDockerService: DockerServiceProtocol {
         return ""
     }
 
-    func listFiles(container: String, path: String) throws -> String { "" }
+    func listFiles(container: String, path: String) throws -> String {
+        listCalls.append(path)
+        return ""
+    }
     func readFile(container: String, path: String) throws -> String { "" }
     func writeFile(container: String, path: String, content: String) throws {
         writtenFiles.append((path: path, content: content))
