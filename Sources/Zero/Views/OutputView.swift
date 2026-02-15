@@ -4,9 +4,27 @@ import SwiftUI
 struct OutputView: View {
     @ObservedObject var executionService: ExecutionService
     @State private var isWrapped = true
+    @State private var showErrorsOnly = false
 
-    private var displayOutput: String {
-        executionService.output.isEmpty ? "Ready to run." : executionService.output
+    private var allOutputLines: [OutputLogLine] {
+        OutputLogHighlighterHelper.lines(from: executionService.output)
+    }
+
+    private var displayedLines: [OutputLogLine] {
+        if executionService.output.isEmpty {
+            return [OutputLogLine(text: "Ready to run.", isError: false)]
+        }
+
+        let filtered = showErrorsOnly ? allOutputLines.filter(\.isError) : allOutputLines
+        if filtered.isEmpty && showErrorsOnly {
+            return [OutputLogLine(text: "No error lines detected.", isError: false)]
+        }
+
+        return filtered
+    }
+
+    private var hasErrorLines: Bool {
+        allOutputLines.contains(where: \.isError)
     }
     
     var body: some View {
@@ -43,6 +61,17 @@ struct OutputView: View {
                 }
 
                 HStack(spacing: 8) {
+                    Button {
+                        showErrorsOnly.toggle()
+                    } label: {
+                        Image(systemName: showErrorsOnly ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(showErrorsOnly ? Color.red : Color.primary)
+                    .disabled(!hasErrorLines && !showErrorsOnly)
+                    .help(showErrorsOnly ? "Show all output" : "Show errors only")
+                    .accessibilityLabel(showErrorsOnly ? "Show all output lines" : "Show error output lines")
+
                     Button {
                         isWrapped.toggle()
                     } label: {
@@ -82,13 +111,21 @@ struct OutputView: View {
             // Output Log
             ScrollViewReader { proxy in
                 ScrollView(isWrapped ? .vertical : [.vertical, .horizontal]) {
-                    Text(displayOutput)
-                        .font(.system(.footnote, design: .monospaced))
-                        .frame(maxWidth: isWrapped ? .infinity : nil, alignment: .leading)
-                        .fixedSize(horizontal: !isWrapped, vertical: false)
-                        .padding(8)
-                        .textSelection(.enabled)
-                        .id("bottom")
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(displayedLines.enumerated()), id: \.offset) { _, line in
+                            Text(line.text.isEmpty ? " " : line.text)
+                                .font(.system(.footnote, design: .monospaced))
+                                .foregroundStyle(line.isError ? Color.red : Color.primary)
+                                .frame(maxWidth: isWrapped ? .infinity : nil, alignment: .leading)
+                                .fixedSize(horizontal: !isWrapped, vertical: true)
+                        }
+
+                        Color.clear
+                            .frame(height: 1)
+                            .id("bottom")
+                    }
+                    .padding(8)
+                    .textSelection(.enabled)
                 }
                 .onChange(of: executionService.output) { _, _ in
                     withAnimation {
