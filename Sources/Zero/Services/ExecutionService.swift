@@ -59,8 +59,9 @@ class ExecutionService: ObservableObject {
                     self.status = .failed("Execution cancelled")
                     self.output += "\n⏹️ Execution cancelled by user"
                 } else {
-                    self.status = .failed(error.localizedDescription)
-                    self.output += "\n❌ Error: \(error.localizedDescription)"
+                    let userMessage = self.userMessage(for: error)
+                    self.status = .failed(userMessage)
+                    self.output += "\n❌ Error: \(userMessage)"
                 }
             }
         }
@@ -207,6 +208,19 @@ class ExecutionService: ObservableObject {
 
         let trimmedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmedCommand.isEmpty ? nil : trimmedCommand
+    }
+
+    private func userMessage(for error: Error) -> String {
+        if let zeroError = error as? ZeroError {
+            switch zeroError {
+            case .runtimeCommandFailed(let userMessage, _):
+                return userMessage
+            default:
+                return zeroError.localizedDescription
+            }
+        }
+
+        return error.localizedDescription
     }
     
     /// Spring Boot 프로젝트 여부 확인
