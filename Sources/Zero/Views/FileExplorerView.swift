@@ -1,13 +1,13 @@
 import SwiftUI
 
 struct FileItem: Identifiable {
-    let id = UUID()
+    var id: String { path }
     let name: String
     let path: String
     let isDirectory: Bool
     var children: [FileItem]?
     var isExpanded: Bool = false
-    
+
     var isHidden: Bool {
         name.hasPrefix(".")
     }
@@ -18,18 +18,28 @@ struct FileExplorerView: View {
     @State private var files: [FileItem] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
-    
+    @State private var operationErrorMessage: String?
+    @State private var showCreateFileSheet = false
+    @State private var showCreateFolderSheet = false
+    @State private var showRenameSheet = false
+    @State private var showDeleteConfirmation = false
+    @State private var actionTarget: FileItem?
+    @State private var newItemName = ""
+    @State private var sheetOperationErrorMessage: String?
+    @State private var isPerformingOperation = false
+
     let containerName: String
     let projectName: String
     let onFileSelect: (FileItem) -> Void
-    
+
     private var fileService: FileService {
         FileService(containerName: containerName)
     }
-    
+
+    private let workspacePath = "/workspace"
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Project Title
             HStack(spacing: 8) {
                 Image(systemName: "folder.fill")
                     .font(.system(size: 14))
@@ -37,15 +47,37 @@ struct FileExplorerView: View {
                 Text(projectName)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
+
                 Spacer()
+
+                Menu {
+                    Button("New File") {
+                        prepareCreateFile()
+                    }
+
+                    Button("New Folder") {
+                        prepareCreateFolder()
+                    }
+                } label: {
+                    Image(systemName: "plus.circle")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .menuStyle(.borderlessButton)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            
+
+            if let operationErrorMessage {
+                Text(operationErrorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+            }
+
             Divider()
                 .padding(.horizontal, 12)
-            
-            // File Tree
+
             if isLoading {
                 VStack(spacing: 12) {
                     ProgressView()
@@ -86,7 +118,11 @@ struct FileExplorerView: View {
                                 selectedFile: $selectedFile,
                                 level: 0,
                                 onSelect: onFileSelect,
-                                onExpand: loadChildren
+                                onExpand: loadChildren,
+                                onCreateFile: { prepareCreateFile(in: $0) },
+                                onCreateFolder: { prepareCreateFolder(in: $0) },
+                                onRename: { prepareRename($0) },
+                                onDelete: { prepareDelete($0) }
                             )
                         }
                     }
@@ -97,20 +133,61 @@ struct FileExplorerView: View {
         }
         .frame(minWidth: 200)
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+        .sheet(isPresented: $showCreateFileSheet) {
+            fileOperationSheet(
+                title: "Create File",
+                prompt: "Enter file name",
+                actionLabel: "Create"
+            ) {
+                await createFile()
+            }
+        }
+        .sheet(isPresented: $showCreateFolderSheet) {
+            fileOperationSheet(
+                title: "Create Folder",
+                prompt: "Enter folder name",
+                actionLabel: "Create"
+            ) {
+                await createFolder()
+            }
+        }
+        .sheet(isPresented: $showRenameSheet) {
+            fileOperationSheet(
+                title: "Rename",
+                prompt: "Enter new name",
+                actionLabel: "Rename"
+            ) {
+                await renameItem()
+            }
+        }
+        .confirmationDialog("Delete Item", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                Task { await deleteItem() }
+            }
+            Button("Cancel", role: .cancel) {
+                actionTarget = nil
+            }
+        } message: {
+            if actionTarget?.isDirectory == true {
+                Text("Are you sure you want to delete \(actionTarget?.name ?? "this folder") and all contents?")
+            } else {
+                Text("Are you sure you want to delete \(actionTarget?.name ?? "this item")?")
+            }
+        }
         .task {
             await loadFiles()
         }
     }
-    
+
     private func refreshFiles() {
         Task { await loadFiles() }
     }
-    
+
     private func loadFiles() async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
-        
+
         do {
             files = try await fileService.listDirectory()
         } catch {
@@ -121,13 +198,188 @@ struct FileExplorerView: View {
             ]
         }
     }
-    
+
     private func loadChildren(for file: FileItem) async -> [FileItem] {
         guard file.isDirectory else { return [] }
         do {
             return try await fileService.listDirectory(path: file.path)
         } catch {
             return []
+        }
+    }
+
+    private func prepareCreateFile(in parent: FileItem? = nil) {
+        actionTarget = parent
+        newItemName = ""
+        operationErrorMessage = nil
+        sheetOperationErrorMessage = nil
+        showCreateFileSheet = true
+    }
+
+    private func prepareCreateFolder(in parent: FileItem? = nil) {
+        actionTarget = parent
+        newItemName = ""
+        operationErrorMessage = nil
+        sheetOperationErrorMessage = nil
+        showCreateFolderSheet = true
+    }
+
+    private func prepareRename(_ item: FileItem) {
+        actionTarget = item
+        newItemName = item.name
+        operationErrorMessage = nil
+        sheetOperationErrorMessage = nil
+        showRenameSheet = true
+    }
+
+    private func prepareDelete(_ item: FileItem) {
+        actionTarget = item
+        operationErrorMessage = nil
+        sheetOperationErrorMessage = nil
+        showDeleteConfirmation = true
+    }
+
+    private func createFile() async {
+        guard !isPerformingOperation else { return }
+        isPerformingOperation = true
+        defer { isPerformingOperation = false }
+
+        do {
+            let sanitizedName = newItemName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let directoryPath = targetDirectoryPath()
+            let path = ((directoryPath as NSString).appendingPathComponent(sanitizedName) as NSString).standardizingPath
+            try await fileService.createFile(path: path)
+            selectedFile = FileItem(name: (path as NSString).lastPathComponent, path: path, isDirectory: false)
+            sheetOperationErrorMessage = nil
+            showCreateFileSheet = false
+            actionTarget = nil
+            await loadFiles()
+        } catch {
+            sheetOperationErrorMessage = "Failed to create file: \(error.localizedDescription)"
+        }
+    }
+
+    private func createFolder() async {
+        guard !isPerformingOperation else { return }
+        isPerformingOperation = true
+        defer { isPerformingOperation = false }
+
+        do {
+            let sanitizedName = newItemName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let directoryPath = targetDirectoryPath()
+            let path = ((directoryPath as NSString).appendingPathComponent(sanitizedName) as NSString).standardizingPath
+            try await fileService.createDirectory(path: path)
+            selectedFile = FileItem(name: (path as NSString).lastPathComponent, path: path, isDirectory: true)
+            sheetOperationErrorMessage = nil
+            showCreateFolderSheet = false
+            actionTarget = nil
+            await loadFiles()
+        } catch {
+            sheetOperationErrorMessage = "Failed to create folder: \(error.localizedDescription)"
+        }
+    }
+
+    private func renameItem() async {
+        guard let actionTarget else { return }
+        guard !isPerformingOperation else { return }
+        isPerformingOperation = true
+        defer { isPerformingOperation = false }
+
+        do {
+            let parentDirectory = (actionTarget.path as NSString).deletingLastPathComponent
+            let sanitizedName = newItemName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let destinationPath = ((parentDirectory as NSString).appendingPathComponent(sanitizedName) as NSString).standardizingPath
+            try await fileService.renameItem(at: actionTarget.path, to: destinationPath)
+            if selectedFile?.path == actionTarget.path {
+                selectedFile = FileItem(name: (destinationPath as NSString).lastPathComponent, path: destinationPath, isDirectory: actionTarget.isDirectory)
+            }
+            sheetOperationErrorMessage = nil
+            showRenameSheet = false
+            self.actionTarget = nil
+            await loadFiles()
+        } catch {
+            sheetOperationErrorMessage = "Failed to rename item: \(error.localizedDescription)"
+        }
+    }
+
+    private func deleteItem() async {
+        guard let actionTarget else { return }
+        do {
+            try await fileService.deleteItem(at: actionTarget.path, recursive: actionTarget.isDirectory)
+            if selectedFile?.path == actionTarget.path {
+                selectedFile = nil
+            }
+            self.actionTarget = nil
+            await loadFiles()
+        } catch {
+            operationErrorMessage = "Failed to delete item: \(error.localizedDescription)"
+        }
+    }
+
+    private func targetDirectoryPath() -> String {
+        if let actionTarget {
+            if actionTarget.isDirectory {
+                return actionTarget.path
+            }
+            return (actionTarget.path as NSString).deletingLastPathComponent
+        }
+
+        if let selectedFile {
+            if selectedFile.isDirectory {
+                return selectedFile.path
+            }
+            return (selectedFile.path as NSString).deletingLastPathComponent
+        }
+
+        return workspacePath
+    }
+
+    @ViewBuilder
+    private func fileOperationSheet(
+        title: String,
+        prompt: String,
+        actionLabel: String,
+        onSubmit: @escaping () async -> Void
+    ) -> some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(title)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+
+                TextField(prompt, text: $newItemName)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(isPerformingOperation)
+
+                if let sheetOperationErrorMessage {
+                    Text(sheetOperationErrorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                Spacer()
+
+                HStack {
+                    Button("Cancel") {
+                        actionTarget = nil
+                        sheetOperationErrorMessage = nil
+                        isPerformingOperation = false
+                        showCreateFileSheet = false
+                        showCreateFolderSheet = false
+                        showRenameSheet = false
+                    }
+
+                    Spacer()
+
+                    Button(actionLabel) {
+                        Task { await onSubmit() }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(newItemName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPerformingOperation)
+                }
+            }
+            .padding(20)
+            .frame(minWidth: 420, minHeight: 180)
         }
     }
 }
@@ -138,25 +390,27 @@ struct FileRowView: View {
     let level: Int
     let onSelect: (FileItem) -> Void
     let onExpand: (FileItem) async -> [FileItem]
-    
+    let onCreateFile: (FileItem) -> Void
+    let onCreateFolder: (FileItem) -> Void
+    let onRename: (FileItem) -> Void
+    let onDelete: (FileItem) -> Void
+
     @State private var isExpanded = false
     @State private var children: [FileItem] = []
     @State private var isLoadingChildren = false
     @State private var isHovered = false
-    
+
     private var isSelected: Bool {
         selectedFile?.id == file.id
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                // Indentation
                 if level > 0 {
                     Spacer().frame(width: CGFloat(level) * 16)
                 }
-                
-                // Expand/Collapse button
+
                 if file.isDirectory {
                     Button(action: { toggleExpand() }) {
                         if isLoadingChildren {
@@ -174,17 +428,15 @@ struct FileRowView: View {
                 } else {
                     Spacer().frame(width: 14)
                 }
-                
-                // Icon (컬러)
+
                 fileIconView
                     .frame(width: 16, height: 16)
-                
-                // Name
+
                 Text(file.name)
                     .font(.system(size: 13))
                     .lineLimit(1)
                     .foregroundStyle(file.isHidden ? .tertiary : .primary)
-                
+
                 Spacer()
             }
             .padding(.horizontal, 8)
@@ -207,8 +459,26 @@ struct FileRowView: View {
                     onSelect(file)
                 }
             }
-            
-            // Children
+            .contextMenu {
+                if file.isDirectory {
+                    Button("New File") {
+                        onCreateFile(file)
+                    }
+
+                    Button("New Folder") {
+                        onCreateFolder(file)
+                    }
+                }
+
+                Button("Rename") {
+                    onRename(file)
+                }
+
+                Button("Delete", role: .destructive) {
+                    onDelete(file)
+                }
+            }
+
             if file.isDirectory && isExpanded {
                 ForEach(children) { child in
                     FileRowView(
@@ -216,14 +486,18 @@ struct FileRowView: View {
                         selectedFile: $selectedFile,
                         level: level + 1,
                         onSelect: onSelect,
-                        onExpand: onExpand
+                        onExpand: onExpand,
+                        onCreateFile: onCreateFile,
+                        onCreateFolder: onCreateFolder,
+                        onRename: onRename,
+                        onDelete: onDelete
                     )
                 }
             }
         }
         .opacity(file.isHidden ? 0.6 : 1.0)
     }
-    
+
     @ViewBuilder
     private var fileIconView: some View {
         let info = FileIconHelper.iconInfo(for: file.name, isDirectory: file.isDirectory)
@@ -231,7 +505,7 @@ struct FileRowView: View {
             .font(.system(size: file.isDirectory ? 14 : 13))
             .foregroundStyle(info.color)
     }
-    
+
     private func toggleExpand() {
         if isExpanded {
             isExpanded = false

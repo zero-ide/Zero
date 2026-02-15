@@ -41,6 +41,9 @@ class MockDockerService: DockerServiceProtocol {
     func listFiles(container: String, path: String) throws -> String { return "" }
     func readFile(container: String, path: String) throws -> String { return "" }
     func writeFile(container: String, path: String, content: String) throws {}
+    func ensureDirectory(container: String, path: String) throws {}
+    func rename(container: String, from: String, to: String) throws {}
+    func remove(container: String, path: String, recursive: Bool) throws {}
     func stopContainer(name: String) throws {}
     func removeContainer(name: String) throws {}
     func fileExists(container: String, path: String) throws -> Bool { return true }

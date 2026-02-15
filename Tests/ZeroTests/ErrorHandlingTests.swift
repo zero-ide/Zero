@@ -194,6 +194,24 @@ class MockDockerServiceProtocol: DockerServiceProtocol {
             throw NSError(domain: "Docker", code: 1)
         }
     }
+
+    func ensureDirectory(container: String, path: String) throws {
+        if shouldFail {
+            throw NSError(domain: "Docker", code: 1)
+        }
+    }
+
+    func rename(container: String, from: String, to: String) throws {
+        if shouldFail {
+            throw NSError(domain: "Docker", code: 1)
+        }
+    }
+
+    func remove(container: String, path: String, recursive: Bool) throws {
+        if shouldFail {
+            throw NSError(domain: "Docker", code: 1)
+        }
+    }
     
     func stopContainer(name: String) throws {
         if shouldFail {
