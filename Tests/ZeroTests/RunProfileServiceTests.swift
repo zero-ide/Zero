@@ -7,11 +7,13 @@ final class RunProfileServiceTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
+        AppLogStore.shared.clear()
         testConfigPath = "/tmp/test-zero-run-profiles-\(UUID().uuidString).json"
         service = FileBasedRunProfileService(configPath: testConfigPath)
     }
 
     override func tearDown() {
+        AppLogStore.shared.clear()
         if let testConfigPath {
             try? FileManager.default.removeItem(atPath: testConfigPath)
         }
@@ -71,5 +73,25 @@ final class RunProfileServiceTests: XCTestCase {
 
         // Then
         XCTAssertEqual(try service.loadCommand(for: repositoryURL), "swift run")
+    }
+
+    func testLoadCommandFromCorruptedStoreAppendsDecodeFailureToAppLogStore() throws {
+        // Given
+        let repositoryURL = URL(string: "https://github.com/zero-ide/Zero.git")!
+        try "{not-valid-json".write(
+            to: URL(fileURLWithPath: testConfigPath),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        // When
+        let command = try service.loadCommand(for: repositoryURL)
+
+        // Then
+        XCTAssertNil(command)
+        let logEntries = AppLogStore.shared.recentEntries()
+        XCTAssertTrue(logEntries.contains { entry in
+            entry.contains("RunProfileService decode failed") && entry.contains(testConfigPath)
+        })
     }
 }
