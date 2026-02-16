@@ -187,10 +187,12 @@ final class DockerServiceTests: XCTestCase {
     func testExecuteShellMapsRunnerFailureToStructuredZeroError() {
         // Given
         let mockRunner = MockCommandRunner()
-        mockRunner.mockError = NSError(
-            domain: "CommandRunner",
-            code: 127,
-            userInfo: [NSLocalizedDescriptionKey: "sh: npm: not found"]
+        mockRunner.mockError = CommandRunnerError.commandFailed(
+            command: "/usr/local/bin/docker",
+            arguments: ["exec", "zero-dev", "sh", "-c", "npm start"],
+            exitCode: 127,
+            stdout: "",
+            stderr: "sh: npm: not found"
         )
         let service = DockerService(runner: mockRunner)
 
@@ -204,7 +206,7 @@ final class DockerServiceTests: XCTestCase {
 
             XCTAssertEqual(userMessage, "Docker shell command failed.")
             XCTAssertTrue(debugDetails.contains("npm start"))
-            XCTAssertTrue(debugDetails.contains("not found"))
+            XCTAssertTrue(debugDetails.contains("stderr=sh: npm: not found"))
         }
     }
 }
