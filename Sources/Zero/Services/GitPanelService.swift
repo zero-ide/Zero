@@ -117,7 +117,7 @@ class GitPanelService: ObservableObject {
             try gitService.push(in: containerName)
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = mapRemoteActionError(error, action: .push)
         }
     }
     
@@ -128,7 +128,7 @@ class GitPanelService: ObservableObject {
             try gitService.pull(in: containerName)
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = mapRemoteActionError(error, action: .pull)
         }
     }
 
@@ -156,5 +156,33 @@ class GitPanelService: ObservableObject {
     func showUntrackedDiffPlaceholder(for path: String) {
         selectedDiffTitle = "Untracked · \(path)"
         selectedDiff = "Untracked files have no git diff until staged."
+    }
+
+    private enum RemoteAction {
+        case pull
+        case push
+    }
+
+    private func mapRemoteActionError(_ error: Error, action: RemoteAction) -> String {
+        let message = error.localizedDescription
+        let normalized = message.lowercased()
+
+        if action == .push && containsAny(normalized, patterns: ["non-fast-forward", "failed to push some refs", "[rejected]", "fetch first"]) {
+            return "Push rejected because remote has new commits. Pull, resolve conflicts if needed, then push again."
+        }
+
+        if action == .pull && containsAny(normalized, patterns: ["automatic merge failed", "merge conflict", "conflict"]) {
+            return "Pull hit merge conflicts. Resolve conflicted files, commit, then pull again."
+        }
+
+        if containsAny(normalized, patterns: ["authentication failed", "permission denied", "could not read from remote repository", "repository not found"]) {
+            return "Git authentication or permission failed. Verify credentials and repository access, then retry."
+        }
+
+        return message
+    }
+
+    private func containsAny(_ text: String, patterns: [String]) -> Bool {
+        patterns.contains { text.contains($0) }
     }
 }
