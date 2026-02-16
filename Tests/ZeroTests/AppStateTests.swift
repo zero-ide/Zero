@@ -1,4 +1,5 @@
 import XCTest
+import Darwin
 @testable import Zero
 
 @MainActor
@@ -12,12 +13,14 @@ class AppStateTests: XCTestCase {
         try? KeychainHelper.standard.delete(service: "com.zero.ide", account: "github_token")
         UserDefaults.standard.removeObject(forKey: Constants.Preferences.selectedOrgLogin)
         UserDefaults.standard.removeObject(forKey: Constants.Preferences.telemetryOptIn)
+        AppLogStore.shared.clear()
         appState = AppState()
     }
     
     override func tearDown() {
         UserDefaults.standard.removeObject(forKey: Constants.Preferences.selectedOrgLogin)
         UserDefaults.standard.removeObject(forKey: Constants.Preferences.telemetryOptIn)
+        AppLogStore.shared.clear()
         appState = nil
         super.tearDown()
     }
@@ -369,6 +372,41 @@ class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.userFacingError, "Failed to load repositories. Please check your token and network.")
     }
 
+    func testFetchRepositoriesErrorDoesNotPrintToStdout() async {
+        // Given
+        appState.isLoggedIn = true
+        appState.accessToken = "gho_test_token"
+        appState.gitHubServiceFactory = { _ in
+            MockGitHubService(fetchReposError: URLError(.timedOut))
+        }
+
+        // When
+        let stdout = await captureStdout {
+            await appState.fetchRepositories()
+        }
+
+        // Then
+        XCTAssertTrue(stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    func testFetchRepositoriesErrorStillAppendsToAppLogStore() async {
+        // Given
+        appState.isLoggedIn = true
+        appState.accessToken = "gho_test_token"
+        appState.gitHubServiceFactory = { _ in
+            MockGitHubService(fetchReposError: URLError(.timedOut))
+        }
+
+        // When
+        await appState.fetchRepositories()
+
+        // Then
+        let logEntries = AppLogStore.shared.recentEntries()
+        XCTAssertTrue(logEntries.contains { entry in
+            entry.contains("Failed to fetch repos") && entry.contains("NSURLErrorDomain")
+        })
+    }
+
     func testFetchOrganizationsAuthErrorForcesLogoutAndClearsSelection() async {
         // Given
         appState.isLoggedIn = true
@@ -514,6 +552,26 @@ class AppStateTests: XCTestCase {
 
         // Then
         XCTAssertFalse(reloadedAgain.telemetryOptIn)
+    }
+
+    private func captureStdout(_ operation: () async -> Void) async -> String {
+        fflush(stdout)
+
+        let outputPipe = Pipe()
+        let originalStdout = dup(STDOUT_FILENO)
+        dup2(outputPipe.fileHandleForWriting.fileDescriptor, STDOUT_FILENO)
+
+        await operation()
+
+        fflush(stdout)
+        dup2(originalStdout, STDOUT_FILENO)
+        close(originalStdout)
+
+        outputPipe.fileHandleForWriting.closeFile()
+        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        outputPipe.fileHandleForReading.closeFile()
+
+        return String(data: outputData, encoding: .utf8) ?? ""
     }
 }
 
