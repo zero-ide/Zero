@@ -259,4 +259,61 @@ final class GitServiceTests: XCTestCase {
         // Then
         XCTAssertEqual(mockRunner.executedScript, "cd /workspace && git commit -m 'feat: it'\"'\"'s done'")
     }
+
+    func testGitFileChangeEncodingExcludesUIOnlyID() throws {
+        // Given
+        let model = GitFileChange(path: "Sources/Zero/main.swift", changeType: .modified)
+
+        // When
+        let encoded = try JSONEncoder().encode(model)
+        let payload = try jsonObject(from: encoded)
+
+        // Then
+        XCTAssertNil(payload["id"])
+        XCTAssertEqual(payload["path"] as? String, "Sources/Zero/main.swift")
+        XCTAssertEqual(payload["changeType"] as? String, "M")
+    }
+
+    func testGitBranchEncodingExcludesUIOnlyID() throws {
+        // Given
+        let model = GitBranch(
+            name: "main",
+            isCurrent: true,
+            isRemote: false,
+            commitHash: "abc123",
+            commitMessage: "initial"
+        )
+
+        // When
+        let encoded = try JSONEncoder().encode(model)
+        let payload = try jsonObject(from: encoded)
+
+        // Then
+        XCTAssertNil(payload["id"])
+        XCTAssertEqual(payload["name"] as? String, "main")
+        XCTAssertEqual(payload["isCurrent"] as? Bool, true)
+    }
+
+    func testGitStashEncodingExcludesUIOnlyID() throws {
+        // Given
+        let model = GitStash(index: 0, hash: "def456", message: "WIP")
+
+        // When
+        let encoded = try JSONEncoder().encode(model)
+        let payload = try jsonObject(from: encoded)
+
+        // Then
+        XCTAssertNil(payload["id"])
+        XCTAssertEqual(payload["index"] as? Int, 0)
+        XCTAssertEqual(payload["hash"] as? String, "def456")
+    }
+
+    private func jsonObject(from data: Data) throws -> [String: Any] {
+        let object = try JSONSerialization.jsonObject(with: data)
+        guard let dictionary = object as? [String: Any] else {
+            XCTFail("Expected dictionary JSON object")
+            return [:]
+        }
+        return dictionary
+    }
 }
