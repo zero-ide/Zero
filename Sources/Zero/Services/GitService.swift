@@ -15,6 +15,11 @@ struct GitFileChange: Codable, Identifiable {
     let id = UUID()
     let path: String
     let changeType: ChangeType
+
+    enum CodingKeys: String, CodingKey {
+        case path
+        case changeType
+    }
     
     enum ChangeType: String, Codable {
         case added = "A"
@@ -43,6 +48,14 @@ struct GitBranch: Codable, Identifiable {
     let isRemote: Bool
     let commitHash: String?
     let commitMessage: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case isCurrent
+        case isRemote
+        case commitHash
+        case commitMessage
+    }
 }
 
 struct GitStash: Codable, Identifiable {
@@ -50,6 +63,12 @@ struct GitStash: Codable, Identifiable {
     let index: Int
     let hash: String
     let message: String
+
+    enum CodingKeys: String, CodingKey {
+        case index
+        case hash
+        case message
+    }
 }
 
 // MARK: - Git Service
