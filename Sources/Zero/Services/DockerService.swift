@@ -156,8 +156,8 @@ struct DockerService: DockerServiceProtocol {
             return zeroError
         }
 
-        if case let CommandRunnerError.commandFailed(binary, arguments, exitCode, output) = error {
-            let debugDetails = "\(context) [binary=\(binary)] [args=\(arguments.joined(separator: " "))] [script=\(command)] [exit=\(exitCode)] [output=\(output)]"
+        if case let CommandRunnerError.commandFailed(binary, arguments, exitCode, stdout, stderr) = error {
+            let debugDetails = "\(context) [binary=\(binary)] [args=\(arguments.joined(separator: " "))] [script=\(command)] [exit=\(exitCode)] [stdout=\(stdout)] [stderr=\(stderr)]"
             return .runtimeCommandFailed(userMessage: context, debugDetails: debugDetails)
         }
 
