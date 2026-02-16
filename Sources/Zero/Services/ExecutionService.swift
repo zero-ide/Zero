@@ -217,7 +217,7 @@ class ExecutionService: ObservableObject {
             return "url_error_\(urlError.errorCode)"
         }
 
-        if case let CommandRunnerError.commandFailed(_, _, exitCode, _) = error {
+        if case let CommandRunnerError.commandFailed(_, _, exitCode, _, _) = error {
             return "command_failed_\(exitCode)"
         }
 
