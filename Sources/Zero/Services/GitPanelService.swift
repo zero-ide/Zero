@@ -128,6 +128,12 @@ class GitPanelService: ObservableObject {
             try gitService.pull(in: containerName)
             await refresh()
         } catch {
+            if isPullConflictError(error) {
+                let conflictedFiles = (try? gitService.conflictedFiles(in: containerName)) ?? []
+                errorMessage = pullConflictGuidance(conflictedFiles: conflictedFiles)
+                return
+            }
+
             errorMessage = mapRemoteActionError(error, action: .pull)
         }
     }
@@ -180,6 +186,27 @@ class GitPanelService: ObservableObject {
         }
 
         return message
+    }
+
+    private func isPullConflictError(_ error: Error) -> Bool {
+        let normalized = error.localizedDescription.lowercased()
+        return containsAny(normalized, patterns: ["automatic merge failed", "merge conflict", "conflict"])
+    }
+
+    private func pullConflictGuidance(conflictedFiles: [String]) -> String {
+        let files = conflictedFiles.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard !files.isEmpty else {
+            return "Pull hit merge conflicts. Resolve conflicted files, commit, then pull again."
+        }
+
+        let maxPreview = 3
+        let previewFiles = Array(files.prefix(maxPreview)).joined(separator: ", ")
+        let remaining = files.count - maxPreview
+        let suffix = remaining > 0 ? " (+\(remaining) more)" : ""
+
+        return "Pull hit merge conflicts in \(previewFiles)\(suffix). Resolve those files, commit, then pull again."
     }
 
     private func containsAny(_ text: String, patterns: [String]) -> Bool {
