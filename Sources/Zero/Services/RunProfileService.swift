@@ -56,11 +56,15 @@ class FileBasedRunProfileService: RunProfileService {
             return [:]
         }
 
-        guard let store = try? JSONDecoder().decode(RunProfileStore.self, from: data) else {
+        do {
+            let store = try JSONDecoder().decode(RunProfileStore.self, from: data)
+            return store.commandsByRepository
+        } catch {
+            AppLogStore.shared.append(
+                "RunProfileService decode failed for \(configPath): \(error.localizedDescription)"
+            )
             return [:]
         }
-
-        return store.commandsByRepository
     }
 
     private func writeCommands(_ commands: [String: String]) throws {
