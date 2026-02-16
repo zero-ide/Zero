@@ -54,9 +54,13 @@ final class LogExportService {
             sections.append("Docker Path: \(snapshot.dockerPath)")
             sections.append("Docker Installed: \(snapshot.isDockerInstalled ? "yes" : "no")")
             sections.append("Docker Daemon Running: \(snapshot.isDockerDaemonRunning ? "yes" : "no")")
+            sections.append("Docker Socket Access: \(snapshot.isDockerSocketAccessible ? "yes" : "no")")
             if let dockerVersion = snapshot.dockerVersion {
                 sections.append("Docker Version: \(dockerVersion)")
             }
+            sections.append("Docker Socket Message: \(snapshot.dockerSocketStatusMessage)")
+            sections.append("Network Reachable: \(snapshot.isNetworkReachable ? "yes" : "no")")
+            sections.append("Network Message: \(snapshot.networkStatusMessage)")
             let containers = snapshot.runningContainers.isEmpty
                 ? "none"
                 : snapshot.runningContainers.joined(separator: ", ")

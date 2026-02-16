@@ -96,6 +96,12 @@ struct DiagnosticsView: View {
                         isHealthy: snapshot.isDockerDaemonRunning
                     )
 
+                    DiagnosticsStatusRow(
+                        title: "Socket Permission",
+                        value: snapshot.isDockerSocketAccessible ? "Granted" : "Unavailable",
+                        isHealthy: snapshot.isDockerSocketAccessible
+                    )
+
                     Text("Docker Path: \(snapshot.dockerPath)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -109,6 +115,28 @@ struct DiagnosticsView: View {
                     Text(snapshot.dockerStatusMessage)
                         .font(.caption)
                         .foregroundStyle(snapshot.isDockerDaemonRunning ? Color.secondary : Color.red)
+
+                    Text(snapshot.dockerSocketStatusMessage)
+                        .font(.caption)
+                        .foregroundStyle(snapshot.isDockerSocketAccessible ? Color.secondary : Color.red)
+                }
+                .padding(12)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .cornerRadius(8)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Network")
+                        .font(.headline)
+
+                    DiagnosticsStatusRow(
+                        title: "Reachability",
+                        value: snapshot.isNetworkReachable ? "Reachable" : "Unavailable",
+                        isHealthy: snapshot.isNetworkReachable
+                    )
+
+                    Text(snapshot.networkStatusMessage)
+                        .font(.caption)
+                        .foregroundStyle(snapshot.isNetworkReachable ? Color.secondary : Color.red)
                 }
                 .padding(12)
                 .background(Color(nsColor: .controlBackgroundColor))
