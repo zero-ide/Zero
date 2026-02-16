@@ -12,6 +12,10 @@ final class LogExportServiceTests: XCTestCase {
             isDockerInstalled: true,
             dockerVersion: "27.0.1",
             isDockerDaemonRunning: true,
+            isDockerSocketAccessible: true,
+            dockerSocketStatusMessage: "Docker socket access is available",
+            isNetworkReachable: true,
+            networkStatusMessage: "Network reachable",
             runningContainers: ["zero-dev", "zero-lsp-java"],
             dockerStatusMessage: "Docker is ready"
         )
@@ -30,6 +34,8 @@ final class LogExportServiceTests: XCTestCase {
         XCTAssertTrue(bundle.contains("## Diagnostics Snapshot"))
         XCTAssertTrue(bundle.contains("Docker Path: /opt/homebrew/bin/docker"))
         XCTAssertTrue(bundle.contains("Docker Version: 27.0.1"))
+        XCTAssertTrue(bundle.contains("Docker Socket Access: yes"))
+        XCTAssertTrue(bundle.contains("Network Reachable: yes"))
         XCTAssertTrue(bundle.contains("Running Containers: zero-dev, zero-lsp-java"))
         XCTAssertTrue(bundle.contains("## Execution Output"))
         XCTAssertTrue(bundle.contains("swift test"))
