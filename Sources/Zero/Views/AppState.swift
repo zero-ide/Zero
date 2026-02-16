@@ -500,13 +500,11 @@ class AppState: ObservableObject {
            case let .runtimeCommandFailed(_, debugDetails) = zeroError {
             let message = "\(prefix): \(debugDetails)"
             AppLogStore.shared.append(message)
-            print(message)
             return
         }
 
         let message = "\(prefix): \(error)"
         AppLogStore.shared.append(message)
-        print(message)
     }
 }
 
