@@ -82,12 +82,12 @@ class HighlightedTextView: NSTextView {
         super.mouseDown(with: event)
     }
     
-    func setup(language: String) {
+    func setup(language: String, themeName: String = "xcode") {
         self.currentLanguage = language
         
         highlightr = Highlightr()
-        if highlightr?.setTheme(to: "xcode") == false {
-            print("Failed to load theme: xcode")
+        if highlightr?.setTheme(to: themeName) == false {
+            AppLogStore.shared.append("Failed to load theme: \(themeName)")
         }
         
         isEditable = true
