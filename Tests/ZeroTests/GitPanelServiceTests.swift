@@ -27,6 +27,16 @@ private final class GitPanelMockContainerRunner: ContainerRunning {
 
 @MainActor
 final class GitPanelServiceTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        AppLogStore.shared.clear()
+    }
+
+    override func tearDown() {
+        AppLogStore.shared.clear()
+        super.tearDown()
+    }
+
     func testPushMapsNonFastForwardFailureToGuidance() async {
         // Given
         let runner = GitPanelMockContainerRunner()
@@ -127,6 +137,47 @@ final class GitPanelServiceTests: XCTestCase {
 
         // Then
         XCTAssertEqual(service.errorMessage, "fatal: unexpected socket close")
+    }
+
+    func testPushFailureAppendsErrorToAppLogStore() async {
+        // Given
+        let runner = GitPanelMockContainerRunner()
+        runner.shellErrorsByCommandSubstring["git push"] = NSError(
+            domain: "git",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "fatal: unexpected socket close"]
+        )
+        let service = makeService(runner: runner)
+
+        // When
+        await service.push()
+
+        // Then
+        let logEntries = AppLogStore.shared.recentEntries()
+        XCTAssertTrue(logEntries.contains { entry in
+            entry.contains("GitPanel push failed") && entry.contains("fatal: unexpected socket close")
+        })
+    }
+
+    func testPullConflictAppendsGuidanceToAppLogStore() async {
+        // Given
+        let runner = GitPanelMockContainerRunner()
+        runner.nextShellOutput = "Sources/Zero/Views/EditorView.swift"
+        runner.shellErrorsByCommandSubstring["git pull"] = NSError(
+            domain: "git",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "Automatic merge failed; fix conflicts and then commit the result."]
+        )
+        let service = makeService(runner: runner)
+
+        // When
+        await service.pull()
+
+        // Then
+        let logEntries = AppLogStore.shared.recentEntries()
+        XCTAssertTrue(logEntries.contains { entry in
+            entry.contains("GitPanel pull failed") && entry.contains("Pull hit merge conflicts")
+        })
     }
 
     private func makeService(runner: GitPanelMockContainerRunner) -> GitPanelService {

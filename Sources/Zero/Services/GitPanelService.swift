@@ -40,7 +40,7 @@ class GitPanelService: ObservableObject {
             branches = try gitService.branches(in: containerName)
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            reportFailure(action: "refresh", userMessage: error.localizedDescription, error: error)
         }
     }
     
@@ -51,7 +51,7 @@ class GitPanelService: ObservableObject {
             try gitService.add(files: files, in: containerName)
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            reportFailure(action: "stage", userMessage: error.localizedDescription, error: error)
         }
     }
     
@@ -62,7 +62,7 @@ class GitPanelService: ObservableObject {
             try gitService.addAll(in: containerName)
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            reportFailure(action: "stageAll", userMessage: error.localizedDescription, error: error)
         }
     }
     
@@ -73,7 +73,7 @@ class GitPanelService: ObservableObject {
             try gitService.commit(message: message, in: containerName)
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            reportFailure(action: "commit", userMessage: error.localizedDescription, error: error)
         }
     }
     
@@ -84,7 +84,7 @@ class GitPanelService: ObservableObject {
             try gitService.commitAll(message: message, in: containerName)
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            reportFailure(action: "commitAll", userMessage: error.localizedDescription, error: error)
         }
     }
     
@@ -95,7 +95,7 @@ class GitPanelService: ObservableObject {
             try gitService.createAndCheckoutBranch(name: name, in: containerName)
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            reportFailure(action: "createBranch", userMessage: error.localizedDescription, error: error)
         }
     }
     
@@ -106,7 +106,7 @@ class GitPanelService: ObservableObject {
             try gitService.checkout(branch: branch, in: containerName)
             await refresh()
         } catch {
-            errorMessage = error.localizedDescription
+            reportFailure(action: "checkout", userMessage: error.localizedDescription, error: error)
         }
     }
     
@@ -117,7 +117,8 @@ class GitPanelService: ObservableObject {
             try gitService.push(in: containerName)
             await refresh()
         } catch {
-            errorMessage = mapRemoteActionError(error, action: .push)
+            let message = mapRemoteActionError(error, action: .push)
+            reportFailure(action: "push", userMessage: message, error: error)
         }
     }
     
@@ -130,11 +131,13 @@ class GitPanelService: ObservableObject {
         } catch {
             if isPullConflictError(error) {
                 let conflictedFiles = (try? gitService.conflictedFiles(in: containerName)) ?? []
-                errorMessage = pullConflictGuidance(conflictedFiles: conflictedFiles)
+                let message = pullConflictGuidance(conflictedFiles: conflictedFiles)
+                reportFailure(action: "pull", userMessage: message, error: error)
                 return
             }
 
-            errorMessage = mapRemoteActionError(error, action: .pull)
+            let message = mapRemoteActionError(error, action: .pull)
+            reportFailure(action: "pull", userMessage: message, error: error)
         }
     }
 
@@ -155,8 +158,13 @@ class GitPanelService: ObservableObject {
         } catch {
             selectedDiffTitle = "Diff · \(path)"
             selectedDiff = "Failed to load diff: \(error.localizedDescription)"
-            errorMessage = error.localizedDescription
+            reportFailure(action: "loadDiff", userMessage: error.localizedDescription, error: error)
         }
+    }
+
+    private func reportFailure(action: String, userMessage: String, error: Error) {
+        errorMessage = userMessage
+        AppLogStore.shared.append("GitPanel \(action) failed: \(userMessage) [raw=\(error.localizedDescription)]")
     }
 
     func showUntrackedDiffPlaceholder(for path: String) {
