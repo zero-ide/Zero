@@ -50,6 +50,31 @@ final class GitPanelServiceTests: XCTestCase {
     func testPullMapsMergeConflictFailureToGuidance() async {
         // Given
         let runner = GitPanelMockContainerRunner()
+        runner.nextShellOutput = """
+        Sources/Zero/Views/EditorView.swift
+        Sources/Zero/Services/GitPanelService.swift
+        """
+        runner.shellErrorsByCommandSubstring["git pull"] = NSError(
+            domain: "git",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "Automatic merge failed; fix conflicts and then commit the result."]
+        )
+        let service = makeService(runner: runner)
+
+        // When
+        await service.pull()
+
+        // Then
+        XCTAssertEqual(
+            service.errorMessage,
+            "Pull hit merge conflicts in Sources/Zero/Views/EditorView.swift, Sources/Zero/Services/GitPanelService.swift. Resolve those files, commit, then pull again."
+        )
+    }
+
+    func testPullConflictFallsBackToGenericGuidanceWhenNoFilesDetected() async {
+        // Given
+        let runner = GitPanelMockContainerRunner()
+        runner.nextShellOutput = ""
         runner.shellErrorsByCommandSubstring["git pull"] = NSError(
             domain: "git",
             code: 1,
