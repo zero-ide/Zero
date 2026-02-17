@@ -25,10 +25,18 @@ class ContainerOrchestrator {
         
         // 3-1. Git 설치 (Alpine 기반 이미지에 git이 없을 경우)
         if image.contains("alpine") {
-            _ = try? dockerService.executeShell(container: containerName, script: "apk add --no-cache git")
+            do {
+                _ = try dockerService.executeShell(container: containerName, script: "apk add --no-cache git")
+            } catch {
+                AppLogStore.shared.append("ContainerOrchestrator git install failed (apk): \(error.localizedDescription)")
+            }
         } else if image.contains("openjdk") || image.contains("temurin") || image.contains("corretto") {
             // JDK 이미지들은 보통 Debian/Ubuntu 기반이므로 apt 사용
-            _ = try? dockerService.executeShell(container: containerName, script: "apt-get update && apt-get install -y git")
+            do {
+                _ = try dockerService.executeShell(container: containerName, script: "apt-get update && apt-get install -y git")
+            } catch {
+                AppLogStore.shared.append("ContainerOrchestrator git install failed (apt): \(error.localizedDescription)")
+            }
         }
         
         // 3. Git Clone (토큰 주입)
